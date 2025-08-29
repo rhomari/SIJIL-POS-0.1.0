@@ -1,5 +1,18 @@
 <script setup lang="ts">
 import { ref } from 'vue'
+import { useI18n } from 'vue-i18n';
+
+const { locale } = useI18n();
+const langs = [
+  { value: 'en', label: 'English' },
+  { value: 'fr', label: 'Français' },
+  { value: 'ar', label: 'العربية' }
+];
+const currentLang = ref(locale.value);
+function setLang(lang: string) {
+  locale.value = lang;
+  currentLang.value = lang;
+}
 const drawer = ref(false)
 const miniState = ref(true)
 const themeColors = [
@@ -47,26 +60,26 @@ function setThemeColor(color: string) {
           <q-item-section avatar>
             <q-icon name="inbox" />
           </q-item-section>
-          <q-item-section>Inbox</q-item-section>
+    <q-item-section>{{ $t('inbox') }}</q-item-section>
         </q-item>
         <q-item clickable v-ripple>
           <q-item-section avatar>
             <q-icon name="star" />
           </q-item-section>
-          <q-item-section>Star</q-item-section>
+    <q-item-section>{{ $t('star') }}</q-item-section>
         </q-item>
         <q-item clickable v-ripple>
           <q-item-section avatar>
             <q-icon name="send" />
           </q-item-section>
-          <q-item-section>Send</q-item-section>
+    <q-item-section>{{ $t('send') }}</q-item-section>
         </q-item>
         <q-separator />
         <q-item clickable v-ripple>
           <q-item-section avatar>
             <q-icon name="drafts" />
           </q-item-section>
-          <q-item-section>Drafts</q-item-section>
+    <q-item-section>{{ $t('drafts') }}</q-item-section>
         </q-item>
       </q-list>
     </q-drawer>
@@ -77,8 +90,8 @@ function setThemeColor(color: string) {
 
     <q-footer elevated class="bg-grey-2 text-black">
       <div class="row items-center justify-between q-pa-sm">
-        <div>
-          <q-btn flat label="Theme" icon="palette" class="q-mr-sm">
+        <div class="row items-center">
+          <q-btn flat :label="$t('theme')" icon="palette" class="q-mr-sm">
             <q-menu>
               <q-list style="min-width: 150px;">
                 <q-item v-for="theme in themeColors" :key="theme.color" clickable @click="setThemeColor(theme.color)">
@@ -90,11 +103,25 @@ function setThemeColor(color: string) {
               </q-list>
             </q-menu>
           </q-btn>
+          <q-btn flat dense icon="language" class="q-ml-xs">
+            <q-menu anchor="top right" self="bottom right">
+              <q-list style="min-width: 100px;">
+                <q-item v-for="lang in langs" :key="lang.value" clickable @click="setLang(lang.value)">
+                  <q-item-section>
+                    <span :style="{ fontWeight: currentLang === lang.value ? 'bold' : 'normal' }">{{ lang.label }}</span>
+                  </q-item-section>
+                  <q-item-section side v-if="currentLang === lang.value">
+                    <q-icon name="check" color="primary" size="xs" />
+                  </q-item-section>
+                </q-item>
+              </q-list>
+            </q-menu>
+          </q-btn>
         </div>
         <div>
-          <q-btn flat label="Help" icon="help_outline" class="q-mr-sm" />
-          <q-btn flat label="Settings" icon="settings" class="q-mr-sm" />
-          <q-btn color="primary" label="Logout" icon="logout" />
+          <q-btn flat :label="$t('help')" icon="help_outline" class="q-mr-sm" />
+          <q-btn flat :label="$t('settings')" icon="settings" class="q-mr-sm" />
+          <q-btn color="primary" :label="$t('logout')" icon="logout" />
         </div>
       </div>
     </q-footer>

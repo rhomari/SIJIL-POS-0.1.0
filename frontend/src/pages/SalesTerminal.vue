@@ -1,5 +1,11 @@
 <template>
   <q-page class="q-pa-md">
+      <div class="row q-mb-md">
+        <q-btn-group spread>
+          <q-btn flat :label="$t('welcome')" disable />
+          <q-btn v-for="lang in langs" :key="lang.value" :label="lang.label" @click="setLang(lang.value)" :color="currentLang === lang.value ? 'primary' : 'grey'" />
+        </q-btn-group>
+      </div>
     <div class="row q-col-gutter-xl">
       <!-- Articles Section -->
       <div class="col-8">
@@ -43,7 +49,7 @@
       <div class="col-4">
         <q-card>
           <q-card-section class="bg-grey-2">
-            <div class="text-h6">Receipt</div>
+              <div class="text-h6">{{ $t('receipt') }}</div>
           </q-card-section>
           <q-separator />
           <q-list>
@@ -89,19 +95,19 @@
                   <q-input v-model.number="tempQty" type="number" dense outlined class="q-mx-sm col" :step="qtyStep" min="0" />
                   <q-btn dense round icon="add" color="primary" @click="tempQty = +(tempQty + qtyStep).toFixed(2)" />
                 </div>
-                <div class="text-caption text-grey-7 q-mt-xs">Use the buttons or type directly. Set to 0 to remove the line.</div>
+                  <div class="text-caption text-grey-7 q-mt-xs">{{ $t('editHint') }}</div>
               </q-card-section>
               <q-separator inset />
               <q-card-actions align="right">
-                <q-btn flat label="Cancel" v-close-popup />
-                <q-btn color="primary" label="Apply" @click="applyEdit" />
+                  <q-btn flat :label="$t('cancel')" v-close-popup />
+                  <q-btn color="primary" :label="$t('apply')" @click="applyEdit" />
               </q-card-actions>
             </q-card>
           </q-dialog>
           <q-separator />
           <q-card-section class="text-right">
-            <div class="text-subtitle1">Total: {{ total.toFixed(2) }}</div>
-            <q-btn color="positive" label="Checkout" class="q-mt-sm" />
+              <div class="text-subtitle1">{{ $t('total') }}: {{ total.toFixed(2) }}</div>
+            <q-btn color="positive" label="Encaisser" class="q-mt-sm" />
           </q-card-section>
         </q-card>
       </div>
@@ -111,6 +117,19 @@
 
 <script setup lang="ts">
 import { ref, computed, onMounted, onBeforeUnmount, nextTick } from 'vue';
+  import { useI18n } from 'vue-i18n';
+
+  const { locale } = useI18n();
+  const langs = [
+    { value: 'en', label: 'English' },
+    { value: 'fr', label: 'Français' },
+    { value: 'ar', label: 'العربية' }
+  ];
+  const currentLang = ref(locale.value);
+  function setLang(lang: string) {
+    locale.value = lang;
+    currentLang.value = lang;
+  }
 
 const categories = ['Stationery', 'Books', 'Office'];
 const selectedCategory = ref(categories[0]);
