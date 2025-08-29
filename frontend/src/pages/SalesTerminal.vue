@@ -1,11 +1,5 @@
 <template>
   <q-page class="q-pa-md">
-      <div class="row q-mb-md">
-        <q-btn-group spread>
-          <q-btn flat :label="$t('welcome')" disable />
-          <q-btn v-for="lang in langs" :key="lang.value" :label="lang.label" @click="setLang(lang.value)" :color="currentLang === lang.value ? 'primary' : 'grey'" />
-        </q-btn-group>
-      </div>
     <div class="row q-col-gutter-xl">
       <!-- Articles Section -->
       <div class="col-8">
@@ -107,7 +101,7 @@
           <q-separator />
           <q-card-section class="text-right">
               <div class="text-subtitle1">{{ $t('total') }}: {{ total.toFixed(2) }}</div>
-            <q-btn color="positive" label="Encaisser" class="q-mt-sm" />
+            <q-btn color="positive" :label="$t('checkout')" class="q-mt-sm" @click="cycleLang" />
           </q-card-section>
         </q-card>
       </div>
@@ -117,19 +111,6 @@
 
 <script setup lang="ts">
 import { ref, computed, onMounted, onBeforeUnmount, nextTick } from 'vue';
-  import { useI18n } from 'vue-i18n';
-
-  const { locale } = useI18n();
-  const langs = [
-    { value: 'en', label: 'English' },
-    { value: 'fr', label: 'Français' },
-    { value: 'ar', label: 'العربية' }
-  ];
-  const currentLang = ref(locale.value);
-  function setLang(lang: string) {
-    locale.value = lang;
-    currentLang.value = lang;
-  }
 
 const categories = ['Stationery', 'Books', 'Office'];
 const selectedCategory = ref(categories[0]);
@@ -159,7 +140,14 @@ const receipt = ref<Article[]>([]);
 function addToReceipt(article: Article) {
   receipt.value.push(article);
 }
-
+import { useI18n } from 'vue-i18n';
+const { locale } = useI18n();
+const langOrder = ['en', 'fr', 'ar'];
+function cycleLang() {
+  const idx = langOrder.indexOf(locale.value);
+  const nextLang = langOrder[(idx + 1) % langOrder.length] ?? 'en';
+  locale.value = nextLang;
+}
 type GroupedLine = Article & { qty: number };
 const groupedReceipt = computed<GroupedLine[]>(() => {
   const map = new Map<number, GroupedLine>();
