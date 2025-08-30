@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref } from 'vue'
+import { ref, onMounted } from 'vue'
 import { useI18n } from 'vue-i18n';
 
 const { locale } = useI18n();
@@ -12,7 +12,15 @@ const currentLang = ref(locale.value);
 function setLang(lang: string) {
   locale.value = lang;
   currentLang.value = lang;
+  localStorage.setItem('app-lang', lang);
 }
+onMounted(() => {
+  const savedLang = localStorage.getItem('app-lang');
+  if (savedLang && langs.some(l => l.value === savedLang)) {
+    locale.value = savedLang;
+    currentLang.value = savedLang;
+  }
+});
 const drawer = ref(false)
 const miniState = ref(true)
 const themeColors = [
@@ -36,9 +44,18 @@ const colorMap: Record<string, string> = {
   warning: '#f2c037',
 }
 function setThemeColor(color: string) {
-  const hex = colorMap[color] || colorMap.primary
-  document.documentElement.style.setProperty('--q-primary', hex || '')
+  const hex = colorMap[color] || colorMap.primary;
+  document.documentElement.style.setProperty('--q-primary', hex || '');
+  localStorage.setItem('app-theme', color);
 }
+
+onMounted(() => {
+  // ...existing language restore code...
+  const savedTheme = localStorage.getItem('app-theme');
+  if (savedTheme && colorMap[savedTheme]) {
+    setThemeColor(savedTheme);
+  }
+});
 </script>
 <template>
   <q-layout view="lHh lpr lFf">
