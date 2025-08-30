@@ -18,7 +18,7 @@
               style="width:100%; height: 120px;"
               @click="addToReceipt(article)"
             >
-            <!--LOCK START-->
+              <!--LOCK START-->
               <q-img
                 :src="article.image"
                 :alt="article.name"
@@ -46,35 +46,65 @@
               <div class="text-h6">{{ $t('receipt') }}</div>
           </q-card-section>
           <q-separator />
-          <q-list>
-    <q-item v-for="item in groupedReceipt" :key="item.id">
-              <q-item-section avatar>
-                <q-fab
-                  color="primary"
-                  text-color="white"
-                  :label="item.qty.toString()"
-                  padding="xs"
-                  dense
-                  direction="left"
-                  icon="more_vert"
-      class="receipt-fab"
-      :model-value="openFabId === item.id"
-      @update:model-value="val => toggleFab(item.id, val)"
-                >
-                  <q-fab-action color="primary" icon="add" @click.stop="increment(item.id)" />
-                  <q-fab-action color="primary" icon="remove" :disable="item.qty <= 1" @click.stop="decrement(item.id)" />
-                  <q-fab-action color="secondary" icon="edit" @click.stop="openEdit(item)" />
-                  <q-fab-action color="negative" icon="delete" @click.stop="deleteLine(item.id)" />
-                </q-fab>
-              </q-item-section>
-              <q-item-section>
-                {{ item.name }}
-              </q-item-section>
-              <q-item-section side>
-                {{ (item.price * item.qty).toFixed(2) }} MAD
-              </q-item-section>
-            </q-item>
-          </q-list>
+          <div class="relative-position">
+            <q-list>
+              <q-item v-for="item in groupedReceipt" :key="item.id"
+                draggable="true"
+                @dragstart="onDragStart(item.id)"
+                @dragend="onDragEnd"
+                :class="{ 'dragging': draggingId === item.id }"
+              >
+                <q-item-section avatar>
+                  <q-fab
+                    color="primary"
+                    text-color="white"
+                    :label="item.qty.toString()"
+                    padding="xs"
+                    dense
+                    direction="left"
+                    icon="more_vert"
+                    class="receipt-fab"
+                    :model-value="openFabId === item.id"
+                    @update:model-value="val => toggleFab(item.id, val)"
+                  >
+                    <q-fab-action color="primary" icon="add" @click.stop="increment(item.id)" />
+                    <q-fab-action color="primary" icon="remove" :disable="item.qty <= 1" @click.stop="decrement(item.id)" />
+                    <q-fab-action color="secondary" icon="edit" @click.stop="openEdit(item)" />
+                    <q-fab-action color="negative" icon="delete" @click.stop="deleteLine(item.id)" />
+                  </q-fab>
+                </q-item-section>
+                <q-item-section>
+                  <div class="row items-center justify-between w-100">
+                    <span>{{ item.name }}</span>
+                    <span class="text-weight-bold">{{ (item.price * item.qty).toFixed(2) }} MAD</span>
+                  </div>
+                </q-item-section>
+              </q-item>
+            </q-list>
+            <!-- Floating trash can (old style: red glow while dragging) -->
+            <div
+              v-show="draggingId !== null"
+              class="trash-drop-zone fixed-center"
+              :class="{ 'trash-active': draggingId !== null }"
+              @dragover.prevent
+              @drop="onDropTrash"
+              :style="draggingId !== null ? 'z-index:9999;pointer-events:auto;' : 'pointer-events:none;'"
+            >
+              <div
+                class="bg-white q-pa-lg shadow-10 rounded-borders flex flex-center transition-all"
+                :style="draggingId !== null ? 'width:140px;height:140px;box-shadow:0 0 24px 8px #f44336;' : 'width:100px;height:100px;'"
+              >
+                <q-icon
+                  name="delete"
+                  :color="draggingId !== null ? 'negative' : 'grey-6'"
+                  size="64px"
+                  class="transition-all"
+                  :class="draggingId !== null ? 'q-animate-bounce' : ''"
+                  :style="draggingId !== null ? 'filter: drop-shadow(0 0 8px #f44336);' : ''"
+                />
+              </div>
+            </div>
+          </div>
           <q-dialog v-model="editDialog">
             <q-card style="width:320px; max-width:90vw;" class="q-pa-sm">
               <q-card-section class="row items-center q-pb-none">
@@ -110,6 +140,22 @@
 </template>
 
 <script setup lang="ts">
+const draggingId = ref<number|null>(null);
+
+function onDragStart(id: number) {
+  draggingId.value = id;
+  // Optionally set drag image
+  // event.dataTransfer?.setDragImage(event.target as HTMLElement, 0, 0);
+}
+function onDragEnd() {
+  draggingId.value = null;
+}
+function onDropTrash() {
+  if (draggingId.value !== null) {
+    deleteLine(draggingId.value);
+    draggingId.value = null;
+  }
+}
 import { ref, computed, onMounted, onBeforeUnmount, nextTick } from 'vue';
 
 const categories = ['Stationery', 'Books', 'Office'];
@@ -246,3 +292,15 @@ function deleteLine(id: number) {
 }
 
 </script>
+
+
+<style scoped>
+.trash-drop-zone {
+  position: fixed;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  pointer-events: auto;
+  transition: background 0.2s;
+}
+</style>
