@@ -31,7 +31,7 @@
                   class="absolute-bottom text-subtitle1 text-center"
                   style="height: 30%; word-wrap: break-word; padding: 0px; font-size: 0.8rem;"
                 >
-                  {{ article.name }} - ${{ article.price.toFixed(2) }}
+                  {{ article.name }} - {{ article.price.toFixed(2) }} MAD
                 </div>
               </q-img>
               <!--LOCK END-->
@@ -71,7 +71,7 @@
                 {{ item.name }}
               </q-item-section>
               <q-item-section side>
-                ${{ (item.price * item.qty).toFixed(2) }}
+                {{ (item.price * item.qty).toFixed(2) }} MAD
               </q-item-section>
             </q-item>
           </q-list>
@@ -100,7 +100,7 @@
           </q-dialog>
           <q-separator />
           <q-card-section class="text-right">
-              <div class="text-subtitle1">{{ $t('total') }}: {{ total.toFixed(2) }}</div>
+              <div class="text-subtitle1">{{ $t('total') }}: {{ total.toFixed(2) }} MAD</div>
             <q-btn color="positive" :label="$t('checkout')" class="q-mt-sm" @click="cycleLang" />
           </q-card-section>
         </q-card>
