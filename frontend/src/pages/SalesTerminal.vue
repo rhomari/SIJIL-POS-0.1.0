@@ -16,7 +16,7 @@
               bordered
               class="shadow-4 cursor-pointer"
               style="width:100%; height: 120px;"
-              @click="addToReceipt(article)"
+              @click="handleAdd(article, $event)"
             >
               <!--LOCK START-->
               <q-img
@@ -47,12 +47,12 @@
           </q-card-section>
           <q-separator />
           <div class="relative-position">
-            <q-list>
-              <q-item v-for="item in groupedReceipt" :key="item.id"
+            <q-list ref="receiptListRef" class="receipt-list">
+              <q-item v-for="item in groupedReceipt" :key="item.id" :data-line-id="item.id"
                 draggable="true"
                 @dragstart="onDragStart(item.id)"
                 @dragend="onDragEnd"
-                :class="{ 'dragging': draggingId === item.id }"
+                :class="{ 'dragging': draggingId === item.id, 'receipt-added': lastAddedId === item.id }"
               >
                 <q-item-section avatar>
                   <q-fab
@@ -90,19 +90,12 @@
               @drop="onDropTrash"
               :style="draggingId !== null ? 'z-index:9999;pointer-events:auto;' : 'pointer-events:none;'"
             >
-              <div
-                class="bg-white q-pa-lg shadow-10 rounded-borders flex flex-center transition-all"
-                :style="draggingId !== null ? 'width:140px;height:140px;box-shadow:0 0 24px 8px #f44336;' : 'width:100px;height:100px;'"
-              >
-                <q-icon
-                  name="delete"
-                  :color="draggingId !== null ? 'negative' : 'grey-6'"
-                  size="64px"
-                  class="transition-all"
-                  :class="draggingId !== null ? 'q-animate-bounce' : ''"
-                  :style="draggingId !== null ? 'filter: drop-shadow(0 0 8px #f44336);' : ''"
-                />
-              </div>
+              <q-icon
+                name="delete"
+                :color="draggingId !== null ? 'negative' : 'grey-6'"
+                size="64px"
+                :class="draggingId !== null ? 'q-animate-bounce' : ''"
+              />
             </div>
           </div>
           <q-dialog v-model="editDialog">
@@ -157,6 +150,7 @@ function onDropTrash() {
   }
 }
 import { ref, computed, onMounted, onBeforeUnmount, nextTick } from 'vue';
+import type { QList } from 'quasar';
 
 const categories = ['Stationery', 'Books', 'Office'];
 const selectedCategory = ref(categories[0]);
@@ -185,6 +179,63 @@ const filteredArticles = computed(() =>
 const receipt = ref<Article[]>([]);
 function addToReceipt(article: Article) {
   receipt.value.push(article);
+}
+// animated add
+// Use explicit QList instance type (component public instance) instead of any for ESLint compliance
+const receiptListRef = ref<InstanceType<typeof QList> | null>(null); // q-list component
+const lastAddedId = ref<number | null>(null);
+function handleAdd(article: Article, ev: MouseEvent) {
+  const card = (ev.currentTarget as HTMLElement) || null;
+  const listComp = receiptListRef.value; // QList instance or null
+  const listEl: HTMLElement | null = listComp ? (listComp.$el as HTMLElement) : null;
+  if (!card || !listEl) {
+    addToReceipt(article);
+    lastAddedId.value = article.id;
+    return;
+  }
+  // Capture non-null list element for use inside async callbacks without re-narrowing
+  const stableListEl: HTMLElement = listEl;
+  const start = card.getBoundingClientRect();
+  addToReceipt(article);
+  lastAddedId.value = article.id;
+  // Wait for receipt DOM update so the target line exists / updated
+  void nextTick(() => {
+  const targetLine = document.querySelector<HTMLElement>(`.receipt-list [data-line-id="${article.id}"]`);
+  // listEl is guaranteed (early return above) but keep safe fallback
+  const baseEl = targetLine ?? stableListEl;
+  const targetRect = baseEl.getBoundingClientRect();
+    const fly = card.cloneNode(true) as HTMLElement;
+    fly.classList.add('fly-clone');
+    Object.assign(fly.style, {
+      position: 'fixed',
+      margin: '0',
+      top: start.top + 'px',
+      left: start.left + 'px',
+      width: start.width + 'px',
+      height: start.height + 'px',
+      zIndex: '99999',
+      pointerEvents: 'none',
+      transform: 'translate(0,0) scale(1)',
+      transition: 'transform .65s cubic-bezier(.55,.06,.27,.99), opacity .65s ease'
+    });
+    document.body.appendChild(fly);
+    // Force reflow
+    void fly.offsetWidth;
+    // Compute destination (center of target line)
+    const endX = targetRect.left + targetRect.width * 0.1; // left padding inside receipt
+    const endY = targetRect.top + targetRect.height * 0.5;
+    const translateX = endX - start.left;
+    const translateY = endY - start.top;
+    requestAnimationFrame(() => {
+      fly.style.transform = `translate(${translateX}px, ${translateY}px) scale(.28)`;
+  // Keep some opacity so the flying object remains visible
+  fly.style.opacity = '0.45';
+    });
+    const cleanup = () => fly.remove();
+    fly.addEventListener('transitionend', cleanup, { once: true });
+    setTimeout(cleanup, 900);
+    setTimeout(() => { if (lastAddedId.value === article.id) lastAddedId.value = null; }, 1000);
+  });
 }
 import { useI18n } from 'vue-i18n';
 const { locale } = useI18n();
@@ -299,8 +350,64 @@ function deleteLine(id: number) {
   position: fixed;
   top: 50%;
   left: 50%;
-  transform: translate(-50%, -50%);
-  pointer-events: auto;
-  transition: background 0.2s;
+  transform: translate(-50%, -50%) scale(.85);
+  width: 140px;
+  height: 140px;
+  border-radius: 50%;
+  background: #fff;
+  border: 4px solid var(--q-grey-4);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  box-shadow: 0 8px 24px rgba(0,0,0,0.18);
+  transition: border-color .25s, box-shadow .25s, transform .25s, background .25s, opacity .25s;
+  opacity: 0.2;
+  position: fixed;
+  overflow: visible;
+}
+.trash-drop-zone::before,
+.trash-drop-zone::after {
+  content: "";
+  position: absolute;
+  top: 0; left: 0;
+  width: 100%; height: 100%;
+  border-radius: 50%;
+  box-shadow: 0 0 0 0 rgba(244,67,54,0.4);
+  opacity: 0;
+}
+.trash-drop-zone.trash-active {
+  border-color: var(--q-negative);
+  opacity: 1;
+  transform: translate(-50%, -50%) scale(1);
+  animation: trashScale 0.35s ease-out;
+}
+.trash-drop-zone.trash-active::before {
+  animation: trashPulseRing 1.4s ease-out infinite;
+}
+.trash-drop-zone.trash-active::after {
+  animation: trashPulseRing 1.4s ease-out .7s infinite;
+}
+@keyframes trashScale {
+  0% { transform: translate(-50%, -50%) scale(.6); }
+  100% { transform: translate(-50%, -50%) scale(1); }
+}
+@keyframes trashPulseRing {
+  0% { box-shadow: 0 0 0 0 rgba(244,67,54,0.55); opacity: .9; }
+  70% { box-shadow: 0 0 0 28px rgba(244,67,54,0); opacity: 0; }
+  100% { box-shadow: 0 0 0 0 rgba(244,67,54,0); opacity: 0; }
+}
+.fly-clone {
+  box-shadow: 0 4px 12px rgba(0,0,0,.25);
+  transition: transform .55s cubic-bezier(.55,.06,.27,.99), opacity .55s ease;
+  will-change: transform, opacity;
+  pointer-events: none;
+  border-radius: 8px;
+  overflow: hidden;
+}
+.receipt-added { animation: receiptAddedFlash .8s ease-out; }
+@keyframes receiptAddedFlash {
+  0% { background: rgba(33,150,243,0.45); }
+  60% { background: rgba(33,150,243,0); }
+  100% { background: transparent; }
 }
 </style>
