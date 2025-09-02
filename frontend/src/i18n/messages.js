@@ -8,10 +8,10 @@ export default {
     apply: "Apply",
     total: "Total",
     checkout: "Checkout"
-  ,inbox: "Inbox"
-  ,star: "Star"
-  ,send: "Send"
-  ,drafts: "Drafts"
+  ,POS: "Point of Sale"
+  ,ARTICLES: "Products & Services"
+  ,STOCK: "Stock"
+  ,PARAMS: "Parameters"
   ,theme: "Theme"
   ,help: "Help"
   ,settings: "Settings"
@@ -26,10 +26,10 @@ export default {
     apply: "Appliquer",
     total: "Total",
     checkout: "Encaisser"
-  ,inbox: "Boîte de réception"
-  ,star: "Favoris"
-  ,send: "Envoyer"
-  ,drafts: "Brouillons"
+  ,POS: "Point de vente"
+  ,ARTICLES: "Produits et Services"
+  ,STOCK: "Stock"
+  ,PARAMS: "Paramètres"
   ,theme: "Thème"
   ,help: "Aide"
   ,settings: "Paramètres"
@@ -44,10 +44,10 @@ export default {
     apply: "تطبيق",
     total: "المجموع",
     checkout: "الدفع"
-  ,inbox: "الوارد"
-  ,star: "المفضلة"
-  ,send: "إرسال"
-  ,drafts: "المسودات"
+  ,POS: "نقطة البيع"
+  ,ARTICLES: "المنتجات والخدمات"
+  ,STOCK: "المخزون"
+  ,PARAMS: "الإعدادات"
   ,theme: "السمة"
   ,help: "مساعدة"
   ,settings: "الإعدادات"
