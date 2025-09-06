@@ -1,0 +1,7 @@
+export SIJILPOS_DB_HOST="localhost"
+export SIJILPOS_DB_PORT="5432"
+export SIJILPOS_DB_USER="postgres"
+export SIJILPOS_DB_PASSWORD="230404"
+export SIJILPOS_DB_NAME="sijitposdb"
+export SIJILPOS_DB_SSLMODE="disable"
+export SIJILPOS_SERVER_PORT="8080"

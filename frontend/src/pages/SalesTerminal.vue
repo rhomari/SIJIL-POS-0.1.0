@@ -219,16 +219,17 @@ function handleAdd(article: Article, ev: MouseEvent) {
       transition: 'transform .65s cubic-bezier(.55,.06,.27,.99), opacity .65s ease'
     });
     document.body.appendChild(fly);
-    // Force reflow
+  
     void fly.offsetWidth;
-    // Compute destination (center of target line)
-    const endX = targetRect.left + targetRect.width * 0.1; // left padding inside receipt
+   
+   
+    const endX = targetRect.left + targetRect.width * 0.1; 
     const endY = targetRect.top + targetRect.height * 0.5;
     const translateX = endX - start.left;
     const translateY = endY - start.top;
     requestAnimationFrame(() => {
       fly.style.transform = `translate(${translateX}px, ${translateY}px) scale(.28)`;
-  // Keep some opacity so the flying object remains visible
+
   fly.style.opacity = '0.45';
     });
     const cleanup = () => fly.remove();
@@ -261,7 +262,7 @@ const groupedReceipt = computed<GroupedLine[]>(() => {
 
 const total = computed(() => groupedReceipt.value.reduce((sum, item) => sum + item.price * item.qty, 0));
 
-// --- FAB open/close with outside click ---
+
 const openFabId = ref<number|null>(null);
 function toggleFab(id: number, open: boolean) {
   openFabId.value = open ? id : (openFabId.value === id ? null : openFabId.value);
@@ -275,11 +276,10 @@ function handleDocumentClick(ev: MouseEvent) {
 onMounted(() => document.addEventListener('click', handleDocumentClick));
 onBeforeUnmount(() => document.removeEventListener('click', handleDocumentClick));
 
-// --- Edit quantity dialog state & logic ---
 const editDialog = ref(false);
 const editLineId = ref<number|null>(null);
 const tempQty = ref<number>(0);
-const qtyStep = 1; // adjust to 0.25 or 0.1 for finer control
+const qtyStep = 1; 
 const editLineName = computed(() => {
   if (editLineId.value == null) return '';
   const line = groupedReceipt.value.find(l => l.id === editLineId.value);
@@ -301,11 +301,11 @@ function applyEdit() {
 function setLineQuantity(id: number, newQty: number) {
   const currentQty = receipt.value.filter(a => a.id === id).length;
   if (newQty <= 0) {
-    // remove completely
+   
     receipt.value = receipt.value.filter(a => a.id !== id);
     return;
   }
-  if (newQty === currentQty) return; // nothing to do
+  if (newQty === currentQty) return;
   if (newQty > currentQty) {
     const article = articles.value.find(a => a.id === id);
     if (!article) return;

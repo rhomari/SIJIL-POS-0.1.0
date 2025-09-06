@@ -1,0 +1,7 @@
+setx SIJILPOS_DB_HOST "localhost"
+setx SIJILPOS_DB_PORT "5432"
+setx SIJILPOS_DB_USER "postgres"
+setx SIJILPOS_DB_PASSWORD "230404"
+setx SIJILPOS_DB_NAME "sijilposdb"
+setx SIJILPOS_DB_SSLMODE "disable"
+setx SIJILPOS_SERVER_PORT "8080"
