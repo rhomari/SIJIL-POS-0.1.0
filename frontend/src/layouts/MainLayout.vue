@@ -72,13 +72,13 @@ onMounted(() => {
 
     <q-drawer v-model="drawer" show-if-above :mini="miniState" @mouseenter="miniState = false" @mouseleave="miniState = true" mini-to-overlay :width="300" :breakpoint="500" bordered>
       <q-list>
-        <q-item clickable v-ripple>
+  <q-item clickable v-ripple :to="{ name: 'pos' }" exact>
           <q-item-section avatar>
             <q-icon name="point_of_sale" />
           </q-item-section>
     <q-item-section>{{ $t('POS') }}</q-item-section>
         </q-item>
-        <q-item clickable v-ripple>
+        <q-item clickable v-ripple :to="{ name: 'products' }">
           <q-item-section avatar>
             <q-icon name="category" />
           </q-item-section>

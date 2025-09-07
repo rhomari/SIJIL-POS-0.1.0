@@ -61,7 +61,16 @@ export default defineConfig((/* ctx */) => {
       // polyfillModulePreload: true,
       // distDir
 
-      // extendViteConf (viteConf) {},
+      extendViteConf (viteConf) {
+        // Dev proxy to backend to avoid CORS during development
+        if (!viteConf.server) viteConf.server = {} as any;
+        const srv = viteConf.server as any;
+        srv.proxy = srv.proxy || {};
+        srv.proxy['/api'] = {
+          target: 'http://192.168.1.2:8080',
+          changeOrigin: true,
+        };
+      },
       // viteVuePluginOptions: {},
 
       vitePlugins: [

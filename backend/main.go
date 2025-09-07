@@ -1,10 +1,12 @@
 package main
 
 import (
-	"github.com/rhomari/Sijil-POS/backend/server"
+	"SIJIL-POS/server"
 )
 
 func main() {
 	srv := server.NewServer()
+	srv.SetupRoutes()
+
 	srv.Start()
 }
