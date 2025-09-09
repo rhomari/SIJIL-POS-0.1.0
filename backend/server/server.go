@@ -70,7 +70,16 @@ func (server *Server) handleCategories(w http.ResponseWriter, r *http.Request) {
 	case http.MethodGet:
 		server.Database.GetCategories(w, r)
 	case http.MethodPost:
-		// Implement category creation logic here, e.g.:
-		// server.Database.CreateCategory(w, r)
+		// Invalidate cache on create
+		server.Database.InvalidateCategoriesCache()
+		w.WriteHeader(http.StatusNoContent)
+	case http.MethodPut:
+		// Invalidate cache on update
+		server.Database.InvalidateCategoriesCache()
+		w.WriteHeader(http.StatusNoContent)
+	case http.MethodDelete:
+		// Invalidate cache on delete
+		server.Database.InvalidateCategoriesCache()
+		w.WriteHeader(http.StatusNoContent)
 	}
 }

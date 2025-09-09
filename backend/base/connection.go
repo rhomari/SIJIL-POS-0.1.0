@@ -24,6 +24,28 @@ type Database struct {
 	Name       string
 	Connection *sql.DB
 }
+type Cache struct {
+	Categories map[string]interface{}
+	Products   map[string]interface{}
+	Users      map[string]interface{}
+}
+
+func CacheInit() *Cache {
+	return &Cache{
+		Categories: make(map[string]interface{}),
+		Products:   make(map[string]interface{}),
+		Users:      make(map[string]interface{}),
+	}
+}
+
+var CacheData *Cache = CacheInit()
+
+const categoriesCacheTTL = 60 * time.Second
+
+func (db *Database) InvalidateCategoriesCache() {
+	delete(CacheData.Categories, "data")
+	delete(CacheData.Categories, "ts")
+}
 
 func (db *Database) Connect() error {
 
@@ -56,6 +78,7 @@ func (db *Database) Connect() error {
 		return err
 	}
 	log.Println("Connected to the database successfully")
+
 	return db.Connection.Ping()
 }
 func (db *Database) GetProducts(w http.ResponseWriter, r *http.Request) {
@@ -101,6 +124,18 @@ func (db *Database) GetCategories(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "Request canceled by the client", http.StatusRequestTimeout)
 		return
 	}
+
+	if cached, ok := CacheData.Categories["data"]; ok {
+		if tsRaw, okTs := CacheData.Categories["ts"]; okTs {
+			if ts, okTime := tsRaw.(time.Time); okTime {
+				if time.Since(ts) < categoriesCacheTTL {
+					w.WriteHeader(http.StatusOK)
+					json.NewEncoder(w).Encode(cached)
+					return
+				}
+			}
+		}
+	}
 	rows, err := db.Connection.Query("SELECT category_id, name, created_at FROM categories")
 	if err != nil {
 		http.Error(w, "Failed to fetch categories", http.StatusInternalServerError)
@@ -123,6 +158,9 @@ func (db *Database) GetCategories(w http.ResponseWriter, r *http.Request) {
 		}
 		categories = append(categories, category)
 	}
+
+	CacheData.Categories["data"] = categories
+	CacheData.Categories["ts"] = time.Now()
 	w.WriteHeader(http.StatusOK)
 	json.NewEncoder(w).Encode(categories)
 }
