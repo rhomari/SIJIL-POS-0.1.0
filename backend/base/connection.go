@@ -40,8 +40,6 @@ func CacheInit() *Cache {
 
 var CacheData *Cache = CacheInit()
 
-const categoriesCacheTTL = 60 * time.Second
-
 func (db *Database) InvalidateCategoriesCache() {
 	delete(CacheData.Categories, "data")
 	delete(CacheData.Categories, "ts")
@@ -126,15 +124,9 @@ func (db *Database) GetCategories(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if cached, ok := CacheData.Categories["data"]; ok {
-		if tsRaw, okTs := CacheData.Categories["ts"]; okTs {
-			if ts, okTime := tsRaw.(time.Time); okTime {
-				if time.Since(ts) < categoriesCacheTTL {
-					w.WriteHeader(http.StatusOK)
-					json.NewEncoder(w).Encode(cached)
-					return
-				}
-			}
-		}
+		w.WriteHeader(http.StatusOK)
+		json.NewEncoder(w).Encode(cached)
+		return
 	}
 	rows, err := db.Connection.Query("SELECT category_id, name, created_at FROM categories")
 	if err != nil {
@@ -160,7 +152,6 @@ func (db *Database) GetCategories(w http.ResponseWriter, r *http.Request) {
 	}
 
 	CacheData.Categories["data"] = categories
-	CacheData.Categories["ts"] = time.Now()
 	w.WriteHeader(http.StatusOK)
 	json.NewEncoder(w).Encode(categories)
 }
