@@ -1,21 +1,59 @@
 <template>
   <q-page class="q-pa-md">
-    <div class="row q-col-gutter-xl">
+  <div class="row q-col-gutter-none">
       <!-- Articles Section -->
-  <div class="col-8 products-pane">
-        <q-tabs v-model="selectedCategory" class="text-primary" align="left" dense>
-          <q-tab v-for="cat in categories" :key="cat" :name="cat" :label="cat" />
-        </q-tabs>
-  <div class="row q-gutter-x-xs q-mt-sm products-scroll" style="overflow-y: auto; max-height: 82vh; -webkit-overflow-scrolling: touch; overscroll-behavior: contain;">
+  <div class="col-12 col-md-7 products-pane">
+        <div class="row items-center no-wrap q-gutter-sm">
+          <div class="col">
+            <q-tabs v-model="selectedCategory" class="text-primary" align="left" dense shrink>
+              <q-tab v-for="cat in visibleCategories" :key="cat" :name="cat" :label="cat" />
+            </q-tabs>
+            <!-- Search popup anchored to tabs container -->
+            <q-menu
+              v-model="searchOpen"
+              target
+              anchor="bottom left"
+              self="top left"
+              transition-show="jump-down"
+              transition-hide="jump-up"
+              content-class="search-menu-content"
+            >
+              <div class="q-pa-sm" style="min-width: 280px;">
+                <q-input
+                  v-model="categorySearch"
+                  outlined
+                  clearable
+                  debounce="200"
+                  placeholder="Search categories"
+                  class="search-glow"
+                  autofocus
+                >
+                  <template #prepend>
+                    <q-icon name="search" />
+                  </template>
+                </q-input>
+              </div>
+            </q-menu>
+          </div>
+          <q-btn-dropdown v-if="overflowCategories.length" dense flat icon="more_horiz" label="More" class="text-primary" content-class="text-primary">
+            <q-list style="min-width: 160px;">
+              <q-item v-for="cat in overflowCategories" :key="cat" clickable v-close-popup @click="selectedCategory = cat">
+                <q-item-section>{{ cat }}</q-item-section>
+              </q-item>
+            </q-list>
+          </q-btn-dropdown>
+          <q-btn dense round flat icon="search" :aria-label="$t('search') as string" @click="searchOpen = !searchOpen" />
+        </div>
+  <div class="row q-gutter-x-none q-gutter-y-sm q-mt-xs products-scroll" style="overflow-y: auto; max-height: 82vh; -webkit-overflow-scrolling: touch; overscroll-behavior: contain;">
           <div
             v-for="article in filteredArticles"
             :key="article.id"
-            class="col-6 col-sm-4 col-md-3 col-lg-2 q-mb-xs"
+            class="col-6 col-sm-4 five-col-md q-mb-sm product-tile"
           >
             <q-card
               bordered
-              class="shadow-4 cursor-pointer"
-              style="width:100%; height: 120px;"
+              class="shadow-3 cursor-pointer product-card"
+              style="height: 120px;"
               @click="handleAdd(article, $event)"
             >
               <!--LOCK START-->
@@ -25,7 +63,7 @@
                 style="width: 100%; height:119px;"
                 :img-style="{ objectFit: 'contain', width: '100%', height: '100%' }"
                 fit="contain"
-                img-class="q-pa-xs bg-white"
+                img-class="q-pa-xs bg-white product-img"
               >
                 <div class="absolute-bottom product-legend text-center">
                   <div class="legend-name">{{ article.name }}</div>
@@ -38,7 +76,7 @@
         </div>
       </div>
       <!-- Receipt Section -->
-  <div class="col-4 receipt-pane">
+  <div class="col-12 col-md-5 receipt-pane q-pl-sm">
   <q-card class="receipt-card">
           <q-card-section class="bg-grey-2">
             <div class="row items-center no-wrap">
@@ -141,6 +179,47 @@
               </q-card-section>
               <q-card-actions align="right">
                 <q-btn flat :label="$t('close')" v-close-popup />
+              </q-card-actions>
+            </q-card>
+          </q-dialog>
+          <!-- Total Reduction Dialog -->
+          <q-dialog v-model="totalReductionDialog">
+            <q-card style="width:420px; max-width:95vw;" class="q-pa-sm">
+              <q-card-section class="row items-center q-pb-none">
+                <div class="text-h6">Total Discount</div>
+                <q-space />
+                <q-btn icon="close" flat round dense v-close-popup />
+              </q-card-section>
+              <q-card-section class="q-pt-sm">
+                <div class="row items-center q-gutter-sm q-mb-sm">
+                  <q-btn-toggle
+                    v-model="totalReductionKind"
+                    :options="[
+                      { label: '%', value: 'percent' },
+                      { label: 'MAD', value: 'amount' }
+                    ]"
+                    unelevated
+                    spread
+                    size="sm"
+                  />
+                </div>
+                <q-input
+                  v-model="totalReductionValueStr"
+                  type="number"
+                  :min="0"
+                  :max="totalReductionKind === 'percent' ? 100 : undefined"
+                  :step="totalReductionKind === 'percent' ? 0.1 : 0.01"
+                  outlined
+                  dense
+                  :suffix="totalReductionKind === 'percent' ? '%' : 'MAD'"
+                  :placeholder="totalReductionKind === 'percent' ? 'Enter discount %' : 'Enter discount amount'"
+                />
+              </q-card-section>
+              <q-separator inset />
+              <q-card-actions align="right">
+                <q-btn v-if="hasTotalReduction" flat color="negative" :label="$t('remove')" @click="deleteTotalReduction" />
+                <q-btn flat :label="$t('cancel')" v-close-popup />
+                <q-btn color="primary" :label="$t('apply')" @click="applyTotalReduction" />
               </q-card-actions>
             </q-card>
           </q-dialog>
@@ -257,11 +336,17 @@
                 <q-icon name="receipt_long" size="18px" class="q-mr-sm" />
                 <span class="total-label">{{ $t('total') }}</span>
               </div>
+              <q-btn dense flat round icon="local_offer" class="q-ml-sm" :color="hasTotalReduction ? 'info' : 'grey-7'" @click="openTotalReduction" />
               <q-space />
               <div class="total-amount row items-end no-wrap">
                 <span class="amount">{{ total.toFixed(2) }}</span>
                 <span class="currency q-ml-xs">MAD</span>
               </div>
+            </div>
+            <div v-if="hasTotalReduction" class="row items-center text-caption text-grey-7 q-mb-sm">
+              <q-icon name="local_offer" size="16px" class="q-mr-xs" />
+              <span class="q-mr-sm">{{ totalReductionLabel }}</span>
+              <span>−{{ totalDiscountAmount.toFixed(2) }} MAD</span>
             </div>
             <div class="row q-col-gutter-sm">
               <div class="col-6">
@@ -305,8 +390,16 @@ import { ref, computed, onMounted, onBeforeUnmount, nextTick, watch } from 'vue'
 import { useQuasar } from 'quasar';
 import type { QList } from 'quasar';
 
-const categories = ['Stationery', 'Books', 'Office'];
-const selectedCategory = ref(categories[0]);
+const categories = [
+  'Stationery', 'Books', 'Office', 'Gadgets', 'Supplies',
+  'Arts', 'Crafts', 'Paper', 'Ink', 'Hardware',
+  'Software', 'Snacks', 'Beverages', 'Cleaning', 'Storage'
+] as const;
+type Category = typeof categories[number];
+const selectedCategory = ref<Category>(categories[0]);
+const categorySearch = ref<string>('');
+// No explicit state needed for popup proxy
+const searchOpen = ref(false);
 type Article = {
   id: number;
   name: string;
@@ -346,6 +439,12 @@ const articles = ref<Article[]>([...baseArticles, ...extraArticles]);
 const filteredArticles = computed(() =>
   articles.value.filter((a: Article) => a.category === selectedCategory.value)
 );
+// Category filtering for tabs/dropdown
+const filteredCategories = computed<Category[]>(() => {
+  const q = categorySearch.value.trim().toLowerCase();
+  if (!q) return Array.from(categories);
+  return Array.from(categories).filter(c => c.toLowerCase().includes(q));
+});
 
 const receipt = ref<Article[]>([]);
 function addToReceipt(article: Article) {
@@ -464,7 +563,36 @@ function reductionLabel(id: number) {
   return r.kind === 'percent' ? `-${Math.round(r.value)}%` : `-${(r.value || 0).toFixed(2)} MAD`;
 }
 
-const total = computed(() => groupedReceipt.value.reduce((sum, item) => sum + lineTotal(item), 0));
+const subtotal = computed(() => groupedReceipt.value.reduce((sum, item) => sum + lineTotal(item), 0));
+// Total-level reduction (percent or amount)
+const totalReduction = ref<number | Reduction | null>(null);
+const hasTotalReduction = computed(() => {
+  const r = totalReduction.value;
+  if (r == null) return false;
+  return typeof r === 'number' ? r > 0 : (r.value || 0) > 0;
+});
+const totalReductionLabel = computed(() => {
+  const r = totalReduction.value;
+  if (r == null) return '';
+  if (typeof r === 'number') return `-${Math.round(r)}%`;
+  return r.kind === 'percent' ? `-${Math.round(r.value)}%` : `-${(r.value || 0).toFixed(2)} MAD`;
+});
+const total = computed(() => {
+  const base = subtotal.value;
+  const r = totalReduction.value;
+  if (r == null) return base;
+  if (typeof r === 'number') {
+    const pct = Math.max(0, Math.min(100, r));
+    return base * (1 - pct / 100);
+  }
+  if (r.kind === 'percent') {
+    const pct = Math.max(0, Math.min(100, r.value || 0));
+    return base * (1 - pct / 100);
+  }
+  const amt = Math.max(0, r.value || 0);
+  return Math.max(0, base - amt);
+});
+const totalDiscountAmount = computed(() => Math.max(0, subtotal.value - total.value));
 
 // --- FAB open/close with outside click ---
 const openFabId = ref<number|null>(null);
@@ -697,6 +825,24 @@ function deleteLine(id: number) {
 
 // --- Receipt actions (checkout, reset, hold, new order) ---
 const $q = useQuasar();
+// Show a limited number of category tabs based on breakpoint
+const maxTabs = computed(() => {
+  if ($q.screen.lt.sm) return 3; // xs
+  if ($q.screen.lt.md) return 4; // sm
+  if ($q.screen.lt.lg) return 6; // md
+  return 8; // lg+
+});
+const visibleCategories = computed(() => filteredCategories.value.slice(0, maxTabs.value));
+const overflowCategories = computed(() => filteredCategories.value.slice(maxTabs.value));
+// Ensure selected category is part of filtered list; if not, switch to first visible
+watch([filteredCategories, maxTabs], () => {
+  const list = filteredCategories.value;
+  const current = selectedCategory.value;
+  if (!list.includes(current)) {
+    const next = (list[0] ?? categories[0]);
+    selectedCategory.value = next;
+  }
+});
 // Simple ISO datetime formatter for display
 function formatDate(iso: string) {
   try {
@@ -718,6 +864,7 @@ function resetReceipt() {
   qtyOverrides.value = {};
   reductionsById.value = {};
   notesById.value = {};
+  totalReduction.value = null;
 }
 
 function putOnHold() {
@@ -730,7 +877,8 @@ function putOnHold() {
   createdAt: new Date().toISOString(),
   // @ts-expect-error: extend object at runtime to include notes (backward compatible)
   notes: { ...notesById.value },
-  reductions: { ...reductionsById.value }
+  reductions: { ...reductionsById.value },
+  totalReduction: totalReduction.value ?? null
   });
   resetReceipt();
   $q.notify({ type: 'warning', message: t('holdPlaced') });
@@ -744,7 +892,33 @@ function launchNewOrder() {
 
 function checkout() {
   if (groupedReceipt.value.length === 0) return;
-  // Placeholder for real checkout flow
+  // Build final receipt JSON and log it
+  const normalizeReduction = (r: number | Reduction | null | undefined): Reduction | null => {
+    if (r == null) return null;
+    return typeof r === 'number' ? { kind: 'percent', value: r } : { kind: r.kind, value: r.value };
+  };
+  const lines = groupedReceipt.value.map(l => {
+    const r = reductionsById.value[l.id];
+    return {
+      id: l.id,
+      name: l.name,
+      unitPrice: l.price,
+      qty: l.qty,
+      lineSubtotal: l.price * l.qty,
+      reduction: normalizeReduction(r),
+      lineTotal: lineTotal(l),
+      note: notesById.value[l.id] ?? undefined
+    };
+  });
+  const receiptJson = {
+    createdAt: new Date().toISOString(),
+    currency: 'MAD',
+    subtotal: subtotal.value,
+    totalReduction: normalizeReduction(totalReduction.value),
+    total: total.value,
+    lines
+  };
+  console.log('Final receipt:', JSON.stringify(receiptJson, null, 2));
   $q.notify({ type: 'positive', message: t('checkoutComplete') });
   resetReceipt();
 }
@@ -766,6 +940,7 @@ function resumeHold(id: number) {
     receipt.value = [];
     qtyOverrides.value = {};
     notesById.value = {};
+    totalReduction.value = null;
     for (const line of h.lines) {
       const base = articles.value.find(a => a.id === line.id) || {
         id: line.id,
@@ -789,6 +964,12 @@ function resumeHold(id: number) {
     if (h.reductions && typeof h.reductions === 'object') {
       // @ts-expect-error - runtime assign
       reductionsById.value = { ...h.reductions };
+    }
+    // restore total reduction if present
+    // @ts-expect-error: historical holds may not have totalReduction
+    if (h.totalReduction !== undefined) {
+      // @ts-expect-error - runtime assign
+      totalReduction.value = h.totalReduction;
     }
     // remove the hold after loading
     removeHold(id);
@@ -821,6 +1002,40 @@ onMounted(() => {
 watch(holds, (val) => {
   try { localStorage.setItem(HOLDS_KEY, JSON.stringify(val)); } catch { /* ignore */ }
 }, { deep: true });
+
+// Total reduction dialog state and actions
+const totalReductionDialog = ref(false);
+const totalReductionKind = ref<'percent' | 'amount'>('percent');
+const totalReductionValueStr = ref<string>('');
+function openTotalReduction() {
+  const r = totalReduction.value;
+  if (r == null) {
+    totalReductionKind.value = 'percent';
+    totalReductionValueStr.value = '';
+  } else if (typeof r === 'number') {
+    totalReductionKind.value = 'percent';
+    totalReductionValueStr.value = String(r);
+  } else {
+    totalReductionKind.value = r.kind;
+    totalReductionValueStr.value = String(r.value ?? '');
+  }
+  totalReductionDialog.value = true;
+}
+function applyTotalReduction() {
+  const n = parseFloat(String(totalReductionValueStr.value).replace(',', '.'));
+  if (totalReductionKind.value === 'percent') {
+    const pct = Number.isFinite(n) ? Math.max(0, Math.min(100, n)) : 0;
+    totalReduction.value = pct > 0 ? pct : null;
+  } else {
+    const amt = Number.isFinite(n) ? Math.max(0, n) : 0;
+    totalReduction.value = amt > 0 ? { kind: 'amount', value: amt } : null;
+  }
+  totalReductionDialog.value = false;
+}
+function deleteTotalReduction() {
+  totalReduction.value = null;
+  totalReductionDialog.value = false;
+}
 
 </script>
 
@@ -855,6 +1070,11 @@ watch(holds, (val) => {
   z-index: 2000;
 }
 .products-scroll { position: relative; z-index: 0; }
+/* Reserve space for vertical scrollbar so 6th column doesn't get squeezed */
+.products-scroll { scrollbar-gutter: stable both-edges; }
+.search-menu-content {
+  z-index: 11000; /* above FAB actions */
+}
 .trash-drop-zone {
   position: fixed;
   top: 50%;
@@ -913,6 +1133,7 @@ watch(holds, (val) => {
   border-radius: 8px;
   overflow: hidden;
 }
+.product-card { width: 96%; margin: 0 auto; }
 .receipt-added { animation: receiptAddedFlash .8s ease-out; }
 @keyframes receiptAddedFlash {
   0% { background: rgba(33,150,243,0.45); }
@@ -932,6 +1153,23 @@ watch(holds, (val) => {
   overflow-wrap: anywhere;
   line-height: 1.15;
 }
+
+/* Floating search glow */
+.search-glow :deep(.q-field__control) {
+  box-shadow: 0 0 0 2px rgba(33,150,243,0.15), 0 8px 24px rgba(33,150,243,0.18);
+  border-radius: 12px;
+  transition: box-shadow .2s ease, transform .12s ease;
+}
+.search-glow :deep(.q-field__control):hover {
+  box-shadow: 0 0 0 2px rgba(33,150,243,0.25), 0 10px 28px rgba(33,150,243,0.24);
+}
+.search-glow :deep(.q-field__native) {
+  font-weight: 600;
+}
+.search-glow :deep(.q-field__control--focused) {
+  box-shadow: 0 0 0 2px rgba(25,118,210,0.35), 0 12px 30px rgba(25,118,210,0.35);
+}
+.product-card { width: 96%; margin: 0 auto; }
 .product-legend .legend-name {
   /* allow up to 2 lines for name */
   display: -webkit-box;
@@ -1000,6 +1238,47 @@ watch(holds, (val) => {
 .nkey {
   min-height: 40px;
   font-weight: 600;
+}
+
+/* Responsive adjustments */
+/* 5 columns on md+ */
+@media (min-width: 1024px) {
+  .five-col-md { flex: 0 0 20%; max-width: 20%; }
+}
+@media (max-width: 1023px) { /* below md */
+  .products-scroll {
+    max-height: none !important; /* let page scroll when stacked */
+  }
+  .receipt-card {
+    max-height: none !important;
+  }
+  .product-card {
+    height: 110px !important;
+  }
+  .product-img {
+    height: 109px !important;
+  }
+  .total-summary {
+    padding: 8px 10px;
+  }
+  .total-amount .amount {
+    font-size: 1.4rem;
+  }
+}
+@media (max-width: 599px) { /* xs */
+  .products-scroll { padding-bottom: 24px; }
+  .product-tile { margin-bottom: 10px; }
+  .product-card {
+    height: 96px !important;
+  }
+  .product-img {
+    height: 95px !important;
+  }
+  .product-legend { font-size: 0.72rem; }
+  .total-amount .amount {
+    font-size: 1.25rem;
+  }
+  .nkey { min-height: 36px; }
 }
 
 </style>
