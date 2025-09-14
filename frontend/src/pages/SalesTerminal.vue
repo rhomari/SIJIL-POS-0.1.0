@@ -2,7 +2,7 @@
   <q-page class="q-pa-md">
   <div class="row q-col-gutter-none">
       <!-- Articles Section -->
-  <div class="col-12 col-md-7 products-pane">
+  <div class="col-12 col-md-7 col-xl-8 products-pane">
         <div class="row items-center no-wrap q-gutter-sm">
           <div class="col">
             <q-tabs v-model="selectedCategory" class="text-primary" align="left" dense shrink>
@@ -12,6 +12,7 @@
             <q-menu
               v-model="searchOpen"
               target
+              no-parent-event
               anchor="bottom left"
               self="top left"
               transition-show="jump-down"
@@ -20,11 +21,12 @@
             >
               <div class="q-pa-sm" style="min-width: 280px;">
                 <q-input
+                  ref="searchInputRef"
                   v-model="categorySearch"
                   outlined
                   clearable
                   debounce="200"
-                  placeholder="Search categories"
+                  placeholder="Search categories or products"
                   class="search-glow"
                   autofocus
                 >
@@ -42,13 +44,21 @@
               </q-item>
             </q-list>
           </q-btn-dropdown>
-          <q-btn dense round flat icon="search" :aria-label="$t('search') as string" @click="searchOpen = !searchOpen" />
+          
+          <q-btn
+            dense
+            flat
+            round
+            icon="search"
+            class="q-ml-xs"
+            @click="() => { searchOpen = true; void nextTick(() => { const el = searchInputRef?.$el as HTMLElement | undefined; const native = el?.querySelector('input') as HTMLInputElement | null; native?.focus(); }); }"
+          />
         </div>
   <div class="row q-gutter-x-none q-gutter-y-sm q-mt-xs products-scroll" style="overflow-y: auto; max-height: 82vh; -webkit-overflow-scrolling: touch; overscroll-behavior: contain;">
           <div
             v-for="article in filteredArticles"
             :key="article.id"
-            class="col-6 col-sm-4 five-col-md q-mb-sm product-tile"
+            class="col-6 col-sm-4 five-col-md six-col-xl q-mb-sm product-tile"
           >
             <q-card
               bordered
@@ -74,9 +84,19 @@
             </q-card>
           </div>
         </div>
+        <!-- Mobile receipt open button (full-width bar above footer) -->
+        <q-btn
+          v-if="$q.screen.lt.md && !receiptDialog"
+          color="primary"
+          unelevated
+          icon="receipt_long"
+          :label="$t('receipt') + (groupedReceipt.length ? ' (' + groupedReceipt.length + ')' : '')"
+          class="mobile-receipt-bar"
+          @click="openReceiptDialog"
+        />
       </div>
       <!-- Receipt Section -->
-  <div class="col-12 col-md-5 receipt-pane q-pl-sm">
+  <div class="col-12 col-md-5 col-xl-4 receipt-pane q-pl-sm" v-if="$q.screen.gt.sm">
   <q-card class="receipt-card">
           <q-card-section class="bg-grey-2">
             <div class="row items-center no-wrap">
@@ -136,7 +156,7 @@
               :class="{ 'trash-active': draggingId !== null }"
               @dragover.prevent
               @drop="onDropTrash"
-              :style="draggingId !== null ? 'z-index:9999;pointer-events:auto;' : 'pointer-events:none;'"
+              :style="draggingId !== null ? 'z-index:1100;pointer-events:auto;' : 'pointer-events:none;'"
             >
               <q-icon
                 name="delete"
@@ -146,42 +166,7 @@
               />
             </div>
           </div>
-          <!-- Hold List Dialog -->
-          <q-dialog v-model="holdListDialog">
-            <q-card style="width: 520px; max-width: 95vw;">
-              <q-card-section class="row items-center q-pb-none">
-                <div class="text-h6">{{ $t('holdList') }}</div>
-                <q-space />
-                <q-btn flat round dense icon="close" v-close-popup />
-              </q-card-section>
-              <q-card-section class="q-pt-sm">
-                <div v-if="holds.length === 0" class="text-grey-7">{{ $t('noHolds') }}</div>
-                <q-list v-else separator>
-                  <q-item v-for="h in holds" :key="h.id">
-                    <q-item-section>
-                      <div class="row items-center justify-between">
-                        <div class="text-subtitle2">#{{ h.id }}</div>
-                        <div class="text-caption text-grey-7">{{ formatDate(h.createdAt) }}</div>
-                      </div>
-                      <div class="row items-center justify-between q-mt-xs">
-                        <div class="text-body2">{{ h.lines.length }} {{ $t('items') }}</div>
-                        <div class="text-weight-bold">{{ h.total.toFixed(2) }} MAD</div>
-                      </div>
-                    </q-item-section>
-                    <q-item-section side>
-                      <div class="column q-gutter-xs">
-                        <q-btn dense color="primary" :label="$t('resume')" @click="resumeHold(h.id)" />
-                        <q-btn dense color="negative" flat :label="$t('remove')" @click="removeHold(h.id)" />
-                      </div>
-                    </q-item-section>
-                  </q-item>
-                </q-list>
-              </q-card-section>
-              <q-card-actions align="right">
-                <q-btn flat :label="$t('close')" v-close-popup />
-              </q-card-actions>
-            </q-card>
-          </q-dialog>
+          
           <!-- Total Reduction Dialog -->
           <q-dialog v-model="totalReductionDialog">
             <q-card style="width:420px; max-width:95vw;" class="q-pa-sm">
@@ -350,22 +335,210 @@
             </div>
             <div class="row q-col-gutter-sm">
               <div class="col-6">
-                <q-btn unelevated color="positive" :label="$t('checkout')" class="full-width" :disable="groupedReceipt.length === 0" @click="checkout" />
+                <q-btn
+                  unelevated
+                  color="positive"
+                  icon="shopping_cart_checkout"
+                  :label="$q.screen.lt.md ? undefined : $t('checkout')"
+                  class="full-width"
+                  :disable="groupedReceipt.length === 0"
+                  @click="checkout"
+                />
               </div>
               <div class="col-6">
-                <q-btn unelevated color="negative" :label="$t('reset')" class="full-width" :disable="groupedReceipt.length === 0" @click="resetReceipt" />
+                <q-btn
+                  unelevated
+                  color="negative"
+                  icon="restart_alt"
+                  :label="$q.screen.lt.md ? undefined : $t('reset')"
+                  class="full-width"
+                  :disable="groupedReceipt.length === 0"
+                  @click="resetReceipt"
+                />
               </div>
               <div class="col-6 q-mt-sm">
-                <q-btn unelevated color="warning" :label="$t('hold')" class="full-width" :disable="groupedReceipt.length === 0" @click="putOnHold" />
+                <q-btn
+                  unelevated
+                  color="warning"
+                  icon="pause_circle"
+                  :label="$q.screen.lt.md ? undefined : $t('hold')"
+                  class="full-width"
+                  :disable="groupedReceipt.length === 0"
+                  @click="putOnHold"
+                />
               </div>
               <div class="col-6 q-mt-sm">
-                <q-btn unelevated color="primary" :label="$t('newOrder')" class="full-width" @click="launchNewOrder" />
+                <q-btn
+                  unelevated
+                  color="primary"
+                  icon="add_shopping_cart"
+                  :label="$q.screen.lt.md ? undefined : $t('newOrder')"
+                  class="full-width"
+                  @click="launchNewOrder"
+                />
               </div>
+              
             </div>
           </q-card-section>
         </q-card>
       </div>
     </div>
+  <!-- Mobile Receipt Dialog (bottom sheet) -->
+    <q-dialog v-model="receiptDialog" position="bottom" transition-show="slide-up" transition-hide="slide-down">
+      <q-card style="width: 100vw; max-width: 100vw; max-height: 85vh;" class="q-pa-none">
+        <q-card-section class="bg-grey-2">
+          <div class="row items-center no-wrap">
+            <div class="text-h6">{{ $t('receipt') }}</div>
+            <q-space />
+            <q-btn dense flat icon="playlist_add_check" size="sm" :label="$t('holdList') + ' (' + holds.length + ')'" @click="openHoldFromMobile" />
+            <q-btn flat round dense icon="close" v-close-popup class="q-ml-sm" />
+          </div>
+        </q-card-section>
+        <q-separator />
+        <div class="relative-position" style="overflow-y: auto; max-height: calc(85vh - 160px);">
+          <q-list class="receipt-list q-px-sm q-pt-sm">
+            <q-item v-for="item in groupedReceipt" :key="item.id" :data-line-id="item.id">
+              <q-item-section avatar>
+                <q-fab
+                  color="primary"
+                  text-color="white"
+                  :label="item.qty.toString()"
+                  padding="xs"
+                  dense
+                  direction="right"
+                  icon="more_vert"
+                  class="receipt-fab"
+                  :model-value="openFabId === item.id"
+                  @update:model-value="val => toggleFab(item.id, val)"
+                >
+                  <q-fab-action color="primary" icon="add" @click.stop="increment(item.id)" />
+                  <q-fab-action color="primary" icon="remove" :disable="item.qty <= 0" @click.stop="decrement(item.id)" />
+                  <q-fab-action color="secondary" icon="edit" @click.stop="openEdit(item)" />
+                  <q-fab-action color="info" icon="local_offer" @click.stop="openReduction(item)" />
+                  <q-fab-action color="accent" icon="edit_note" @click.stop="openNote(item)" />
+                  <q-fab-action color="negative" icon="delete" @click.stop="deleteLine(item.id)" />
+                </q-fab>
+              </q-item-section>
+              <q-item-section>
+                <div class="row items-center justify-between w-100">
+                  <span>{{ item.name }}</span>
+                  <span class="text-weight-bold">{{ lineTotal(item).toFixed(2) }} MAD</span>
+                </div>
+                <div v-if="hasReduction(item.id)" class="text-caption text-grey-7 q-mt-xs">
+                  <q-icon name="local_offer" size="16px" class="q-mr-xs" /> {{ reductionLabel(item.id) }}
+                </div>
+                <div v-if="notesById[item.id]" class="text-caption text-grey-7 q-mt-xs ellipsis">
+                  <q-icon name="notes" size="16px" class="q-mr-xs" /> {{ notesById[item.id] }}
+                </div>
+              </q-item-section>
+            </q-item>
+          </q-list>
+        </div>
+        <q-separator />
+        <q-card-section>
+          <div class="total-summary row items-center no-wrap q-mb-sm">
+            <div class="total-chip row items-center no-wrap">
+              <q-icon name="receipt_long" size="18px" class="q-mr-sm" />
+              <span class="total-label">{{ $t('total') }}</span>
+            </div>
+            <q-btn dense flat round icon="local_offer" class="q-ml-sm" :color="hasTotalReduction ? 'info' : 'grey-7'" @click="openTotalReduction" />
+            <q-space />
+            <div class="total-amount row items-end no-wrap">
+              <span class="amount">{{ total.toFixed(2) }}</span>
+              <span class="currency q-ml-xs">MAD</span>
+            </div>
+          </div>
+          <div v-if="hasTotalReduction" class="row items-center text-caption text-grey-7 q-mb-sm">
+            <q-icon name="local_offer" size="16px" class="q-mr-xs" />
+            <span class="q-mr-sm">{{ totalReductionLabel }}</span>
+            <span>−{{ totalDiscountAmount.toFixed(2) }} MAD</span>
+          </div>
+          <div class="row q-col-gutter-sm">
+            <div class="col-6">
+              <q-btn
+                unelevated
+                color="positive"
+                icon="shopping_cart_checkout"
+                :label="$q.screen.lt.md ? undefined : $t('checkout')"
+                class="full-width"
+                :disable="groupedReceipt.length === 0"
+                @click="checkout"
+              />
+            </div>
+            <div class="col-6">
+              <q-btn
+                unelevated
+                color="negative"
+                icon="restart_alt"
+                :label="$q.screen.lt.md ? undefined : $t('reset')"
+                class="full-width"
+                :disable="groupedReceipt.length === 0"
+                @click="resetReceipt"
+              />
+            </div>
+            <div class="col-6 q-mt-sm">
+              <q-btn
+                unelevated
+                color="warning"
+                icon="pause_circle"
+                :label="$q.screen.lt.md ? undefined : $t('hold')"
+                class="full-width"
+                :disable="groupedReceipt.length === 0"
+                @click="putOnHold"
+              />
+            </div>
+            <div class="col-6 q-mt-sm">
+              <q-btn
+                unelevated
+                color="primary"
+                icon="add_shopping_cart"
+                :label="$q.screen.lt.md ? undefined : $t('newOrder')"
+                class="full-width"
+                @click="launchNewOrder"
+              />
+            </div>
+            
+          </div>
+        </q-card-section>
+      </q-card>
+    </q-dialog>
+    
+    <!-- Hold List Dialog (global, works on all sizes) -->
+    <q-dialog v-model="holdListDialog">
+      <q-card style="width: 520px; max-width: 95vw;">
+        <q-card-section class="row items-center q-pb-none">
+          <div class="text-h6">{{ $t('holdList') }}</div>
+          <q-space />
+          <q-btn flat round dense icon="close" v-close-popup />
+        </q-card-section>
+        <q-card-section class="q-pt-sm">
+          <div v-if="holds.length === 0" class="text-grey-7">{{ $t('noHolds') }}</div>
+          <q-list v-else separator>
+            <q-item v-for="h in holds" :key="h.id">
+              <q-item-section>
+                <div class="row items-center justify-between">
+                  <div class="text-subtitle2">#{{ h.id }}</div>
+                  <div class="text-caption text-grey-7">{{ formatDate(h.createdAt) }}</div>
+                </div>
+                <div class="row items-center justify-between q-mt-xs">
+                  <div class="text-body2">{{ h.lines.length }} {{ $t('items') }}</div>
+                  <div class="text-weight-bold">{{ h.total.toFixed(2) }} MAD</div>
+                </div>
+              </q-item-section>
+              <q-item-section side>
+                <div class="column q-gutter-xs">
+                  <q-btn dense color="primary" :label="$t('resume')" @click="resumeHold(h.id)" />
+                  <q-btn dense color="negative" flat :label="$t('remove')" @click="removeHold(h.id)" />
+                </div>
+              </q-item-section>
+            </q-item>
+          </q-list>
+        </q-card-section>
+        <q-card-actions align="right">
+          <q-btn flat :label="$t('close')" v-close-popup />
+        </q-card-actions>
+      </q-card>
+    </q-dialog>
   </q-page>
 </template>
 
@@ -386,7 +559,8 @@ function onDropTrash() {
     draggingId.value = null;
   }
 }
-import { ref, computed, onMounted, onBeforeUnmount, nextTick, watch } from 'vue';
+import { ref, computed, onMounted, onBeforeUnmount, nextTick, watch, type ComponentPublicInstance } from 'vue';
+// import { useRouter } from 'vue-router';
 import { useQuasar } from 'quasar';
 import type { QList } from 'quasar';
 
@@ -398,6 +572,7 @@ const categories = [
 type Category = typeof categories[number];
 const selectedCategory = ref<Category>(categories[0]);
 const categorySearch = ref<string>('');
+const searchInputRef = ref<ComponentPublicInstance | null>(null);
 // No explicit state needed for popup proxy
 const searchOpen = ref(false);
 type Article = {
@@ -436,14 +611,27 @@ const extraArticles: Article[] = Array.from({ length: 120 }, (_v, idx) => {
 
 const articles = ref<Article[]>([...baseArticles, ...extraArticles]);
 
-const filteredArticles = computed(() =>
-  articles.value.filter((a: Article) => a.category === selectedCategory.value)
-);
+const filteredArticles = computed(() => {
+  const q = categorySearch.value.trim().toLowerCase();
+  if (q) {
+    return articles.value.filter((a: Article) =>
+      a.name.toLowerCase().includes(q) || a.category.toLowerCase().includes(q)
+    );
+  }
+  return articles.value.filter((a: Article) => a.category === selectedCategory.value);
+});
 // Category filtering for tabs/dropdown
 const filteredCategories = computed<Category[]>(() => {
   const q = categorySearch.value.trim().toLowerCase();
   if (!q) return Array.from(categories);
-  return Array.from(categories).filter(c => c.toLowerCase().includes(q));
+  const nameMatches = new Set(Array.from(categories).filter(c => c.toLowerCase().includes(q)));
+  const productMatches = new Set(
+    articles.value
+      .filter((a: Article) => a.name.toLowerCase().includes(q) || a.category.toLowerCase().includes(q))
+      .map(a => a.category as Category)
+  );
+  const merged = new Set<Category>([...Array.from(nameMatches), ...Array.from(productMatches)]);
+  return Array.from(categories).filter(c => merged.has(c));
 });
 
 const receipt = ref<Article[]>([]);
@@ -509,6 +697,9 @@ function handleAdd(article: Article, ev: MouseEvent) {
 }
 import { useI18n } from 'vue-i18n';
 const { t } = useI18n();
+// const router = useRouter();
+// Mobile receipt dialog state
+const receiptDialog = ref(false);
 // Optional per-line quantity overrides (allow decimals)
 const qtyOverrides = ref<Record<number, number>>({});
 // Optional per-line notes
@@ -535,6 +726,30 @@ const groupedReceipt = computed<GroupedLine[]>(() => {
     return (ov !== undefined) ? { ...line, qty: ov } : line;
   });
 });
+
+// Reset filters on Escape key
+function onGlobalKeydown(e: KeyboardEvent) {
+  if (e.key === 'Escape') {
+    if (categorySearch.value) {
+      categorySearch.value = '';
+    }
+    if (searchOpen.value) {
+      searchOpen.value = false;
+    }
+    return;
+  }
+  if (e.key === 'F3') {
+    e.preventDefault();
+    searchOpen.value = true;
+    void nextTick(() => {
+      const el = searchInputRef.value?.$el as HTMLElement | undefined;
+      const native = el?.querySelector('input') as HTMLInputElement | null;
+      if (native) native.focus();
+    });
+  }
+}
+onMounted(() => window.addEventListener('keydown', onGlobalKeydown));
+onBeforeUnmount(() => window.removeEventListener('keydown', onGlobalKeydown));
 
 // Helper: compute line total with reduction
 function lineTotal(line: GroupedLine) {
@@ -925,8 +1140,30 @@ function checkout() {
 
 // Holds: open list, resume, remove, persist
 function openHoldList() {
+  // prevent any overlay (drag zone, FAB, search) from sitting above dialog
+  draggingId.value = null;
+  openFabId.value = null;
+  searchOpen.value = false;
   holdListDialog.value = true;
 }
+
+function openReceiptDialog() {
+  // Close overlays before opening the mobile receipt
+  draggingId.value = null;
+  openFabId.value = null;
+  searchOpen.value = false;
+  receiptDialog.value = true;
+}
+
+function openHoldFromMobile() {
+  receiptDialog.value = false;
+  // Small delay to allow dialog to close transition before opening next
+  setTimeout(() => {
+    openHoldList();
+  }, 200);
+}
+
+// Logout is handled globally in MainLayout via the footer button & login dialog
 
 function removeHold(id: number) {
   holds.value = holds.value.filter(h => h.id !== id);
@@ -1041,6 +1278,20 @@ function deleteTotalReduction() {
 
 
 <style scoped>
+/* Full-width mobile receipt bar (fixed above footer) */
+.mobile-receipt-bar {
+  position: fixed;
+  left: 12px;
+  right: 12px;
+  bottom: calc(64px + env(safe-area-inset-bottom, 0px)); /* footer (~56px) + gap */
+  z-index: 1200; /* above page content, below dialogs */
+  border-radius: 999px;
+  box-shadow: 0 6px 16px rgba(0,0,0,0.18);
+}
+/* Slightly larger touch target on very small screens */
+@media (max-width: 599px) {
+  .mobile-receipt-bar :deep(.q-btn__content) { padding: 0 8px; }
+}
 .receipt-card {
   display: flex;
   flex-direction: column;
@@ -1050,7 +1301,7 @@ function deleteTotalReduction() {
   /* allow FAB actions to extend outside card */
   overflow: visible;
 }
-.receipt-pane { position: relative; z-index: 9000; }
+.receipt-pane { position: relative; z-index: 100; }
 .products-pane { position: relative; z-index: 0; }
 .receipt-list :deep(.q-item) { overflow: visible; }
 .receipt-list :deep(.q-list) { overflow: visible; }
@@ -1060,20 +1311,20 @@ function deleteTotalReduction() {
 .receipt-list :deep(.q-item__section--bottom) {
   overflow: visible;
 }
-.receipt-list :deep(.q-fab) { z-index: 9999; }
-.receipt-list :deep(.q-fab__actions) { z-index: 10000; }
+.receipt-list :deep(.q-fab) { z-index: 300; }
+.receipt-list :deep(.q-fab__actions) { z-index: 310; }
 .receipt-body {
   /* let the middle list area grow and scroll */
   overflow-y: auto;
   max-height: 100%;
   position: relative;
-  z-index: 2000;
+  z-index: 200;
 }
 .products-scroll { position: relative; z-index: 0; }
 /* Reserve space for vertical scrollbar so 6th column doesn't get squeezed */
 .products-scroll { scrollbar-gutter: stable both-edges; }
 .search-menu-content {
-  z-index: 11000; /* above FAB actions */
+  z-index: 250; /* above list, below dialogs */
 }
 .trash-drop-zone {
   position: fixed;
@@ -1245,10 +1496,21 @@ function deleteTotalReduction() {
 @media (min-width: 1024px) {
   .five-col-md { flex: 0 0 20%; max-width: 20%; }
 }
+/* 6 columns on xl+ (approx >= 1920px) */
+@media (min-width: 1920px) {
+  .six-col-xl { flex: 0 0 16.6667%; max-width: 16.6667%; }
+}
+/* Slightly tighter product card for very large screens */
+@media (min-width: 1920px) {
+  .product-card { width: 94%; }
+}
 @media (max-width: 1023px) { /* below md */
   .products-scroll {
     max-height: none !important; /* let page scroll when stacked */
+    row-gap: 8px !important; /* reduced vertical spacing */
   }
+  /* add a bit more vertical breathing room on small screens */
+  .product-tile { margin-bottom: 8px !important; }
   .receipt-card {
     max-height: none !important;
   }
@@ -1266,8 +1528,9 @@ function deleteTotalReduction() {
   }
 }
 @media (max-width: 599px) { /* xs */
-  .products-scroll { padding-bottom: 24px; }
-  .product-tile { margin-bottom: 10px; }
+  /* leave space for the fixed receipt bar */
+  .products-scroll { padding-bottom: 120px; row-gap: 10px !important; }
+  .product-tile { margin-bottom: 10px !important; }
   .product-card {
     height: 96px !important;
   }
