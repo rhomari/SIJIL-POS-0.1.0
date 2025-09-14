@@ -7,8 +7,22 @@ export default {
     cancel: "Cancel",
     save: "Save",
     apply: "Apply",
-    total: "Total",
-    checkout: "Checkout"
+  total: "Total",
+  checkout: "Checkout",
+  reset: "Reset",
+  hold: "Put on Hold",
+  newOrder: "New Order",
+  holdPlaced: "Order put on hold",
+  newOrderStarted: "New order started",
+  checkoutComplete: "Checkout complete",
+  holdList: "Hold List",
+  noHolds: "No held orders",
+  items: "items",
+  resume: "Resume",
+  remove: "Remove",
+  close: "Close",
+  resumedFromHold: "Order resumed from hold",
+  replaceCurrentOrderConfirm: "Replace current order with the held one?"
   ,POS: "Point of Sale"
   ,ARTICLES: "Products & Services"
   ,STOCK: "Stock"
@@ -72,8 +86,22 @@ export default {
     cancel: "Annuler",
     save: "Enregistrer",
     apply: "Appliquer",
-    total: "Total",
-    checkout: "Encaisser"
+  total: "Total",
+  checkout: "Encaisser",
+  reset: "Réinitialiser",
+  hold: "Mettre en attente",
+  newOrder: "Nouvelle commande",
+  holdPlaced: "Commande mise en attente",
+  newOrderStarted: "Nouvelle commande démarrée",
+  checkoutComplete: "Encaissement effectué",
+  holdList: "Commandes en attente",
+  noHolds: "Aucune commande en attente",
+  items: "articles",
+  resume: "Reprendre",
+  remove: "Supprimer",
+  close: "Fermer",
+  resumedFromHold: "Commande reprise depuis l'attente",
+  replaceCurrentOrderConfirm: "Remplacer la commande actuelle par celle en attente ?"
   ,POS: "Point de vente"
   ,ARTICLES: "Produits et Services"
   ,STOCK: "Stock"
@@ -137,8 +165,22 @@ export default {
     cancel: "إلغاء",
     save: "حفظ",
     apply: "تطبيق",
-    total: "المجموع",
-    checkout: "الدفع"
+  total: "المجموع",
+  checkout: "الدفع",
+  reset: "إعادة تعيين",
+  hold: "وضع قيد الانتظار",
+  newOrder: "طلب جديد",
+  holdPlaced: "تم وضع الطلب قيد الانتظار",
+  newOrderStarted: "تم بدء طلب جديد",
+  checkoutComplete: "تم إكمال الدفع",
+  holdList: "قائمة الانتظار",
+  noHolds: "لا توجد طلبات قيد الانتظار",
+  items: "عناصر",
+  resume: "استئناف",
+  remove: "إزالة",
+  close: "إغلاق",
+  resumedFromHold: "تم استئناف الطلب من الانتظار",
+  replaceCurrentOrderConfirm: "استبدال الطلب الحالي بالطلب قيد الانتظار؟"
   ,POS: "نقطة البيع"
   ,ARTICLES: "المنتجات والخدمات"
   ,STOCK: "المخزون"

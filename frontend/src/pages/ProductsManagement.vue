@@ -262,7 +262,7 @@
 	interface Category {
 		category_id: number;
 		name: string;
-		created_at?: string;
+		created_at: string;
 	}
   
 	interface Product {
@@ -352,7 +352,8 @@
 			function openCategoryDialog(seed?: Partial<Category>) {
 				const model: Category = {
 					category_id: seed?.category_id ?? 0,
-					name: seed?.name ?? ''
+					name: seed?.name ?? '',
+					created_at: seed?.created_at ?? ''
 				};
 				categoryDialog.value = {
 					open: true,
@@ -518,7 +519,7 @@
 				return c ? c.name : null;
 			}
 			function formatCurrency(n: number): string {
-				return `$${(n ?? 0).toFixed(2)}`;
+				return `${(n ?? 0).toFixed(2)} MAD`;
 			}
   
 			// Confirm dialog
@@ -527,19 +528,19 @@
 				message: ''
 			});
 			function getCategories() {
-				fetch('http://192.168.1.2:8080/api/categories', { method: 'GET' })
+				fetch('http://192.168.1.216:8080/api/categories', { method: 'GET' })
 					.then(res => {
 						if (!res.ok) throw new Error(`HTTP ${res.status}`);
 						return res.json();
 					})
 					.then((data: Array<{ id: number; name: string; created_at?: string }>) => {
-						// Map backend shape (id,name,created_at) -> frontend Category
-						categories.value = data.map(item => ({
+
+							categories.value = data.map(item => ({
 							category_id: item.id,
 							name: item.name,
-							...(item.created_at ? { created_at: item.created_at } : {})
+							created_at: item.created_at ?? ''
 						}));
-						// Reset filter if it no longer exists
+
 						if (categoryFilterId.value && !categories.value.some(c => c.category_id === categoryFilterId.value)) {
 							categoryFilterId.value = null;
 						}
