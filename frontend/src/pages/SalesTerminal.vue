@@ -53,6 +53,14 @@
             class="q-ml-xs"
             @click="() => { searchOpen = true; void nextTick(() => { const el = searchInputRef?.$el as HTMLElement | undefined; const native = el?.querySelector('input') as HTMLInputElement | null; native?.focus(); }); }"
           />
+          <q-btn
+            dense
+            flat
+            round
+            icon="qr_code_scanner"
+            class="q-ml-xs"
+            @click="openScanner"
+          />
         </div>
   <div class="row q-gutter-x-none q-gutter-y-sm q-mt-xs products-scroll" style="overflow-y: auto; max-height: 82vh; -webkit-overflow-scrolling: touch; overscroll-behavior: contain;">
           <div
@@ -64,6 +72,7 @@
               bordered
               class="shadow-3 cursor-pointer product-card"
               style="height: 120px;"
+              v-ripple="false"
               @click="handleAdd(article, $event)"
             >
               <!--LOCK START-->
@@ -502,6 +511,18 @@
         </q-card-section>
       </q-card>
     </q-dialog>
+    <q-dialog v-model="scannerDialog" maximized>
+      <q-card class="q-pa-md">
+        <q-card-section class="row items-center q-pb-none">
+          <div class="text-h6">{{$t('scan') }}</div>
+          <q-space />
+          <q-btn flat round dense icon="close" v-close-popup />
+        </q-card-section>
+        <q-card-section class="q-pt-sm flex flex-center">
+          <CameraScanner @decoded="onScannerDecoded" @close="scannerDialog=false" />
+        </q-card-section>
+      </q-card>
+    </q-dialog>
     
     <!-- Hold List Dialog (global, works on all sizes) -->
     <q-dialog v-model="holdListDialog">
@@ -581,17 +602,18 @@ type Article = {
   price: number;
   image: string;
   category: string;
+  barcode: string;
 };
 
 // Base seed items
 const baseArticles: Article[] = [
-  { id: 1, name: 'Blue Ballpoint Pen', price: 1.2, image: '/images/1.png', category: 'Stationery' },
-  { id: 2, name: 'A5 Spiral Notebook', price: 3.5, image: '/images/2.png', category: 'Stationery' },
-  { id: 3, name: 'Highlighter Set', price: 4.0, image: '/images/3.png', category: 'Stationery' },
-  { id: 4, name: 'Stapler', price: 5.5, image: '/images/4.png', category: 'Office' },
-  { id: 5, name: 'Desk Organizer', price: 9.9, image: '/images/5.png', category: 'Office' },
-  { id: 6, name: 'Mystery Novel', price: 7.99, image: '/images/6.png', category: 'Books' },
-  { id: 7, name: 'Science Textbook', price: 24.5, image: '/images/7.png', category: 'Books' }
+  { id: 1, name: 'Blue Ballpoint Pen', price: 1.2, image: '/images/1.png', category: 'Stationery', barcode: '2000000000001' },
+  { id: 2, name: 'A5 Spiral Notebook', price: 3.5, image: '/images/2.png', category: 'Stationery', barcode: '887930951998' },
+  { id: 3, name: 'Highlighter Set', price: 4.0, image: '/images/3.png', category: 'Stationery', barcode: '2000000000003' },
+  { id: 4, name: 'Stapler', price: 5.5, image: '/images/4.png', category: 'Office', barcode: '2000000000004' },
+  { id: 5, name: 'Desk Organizer', price: 9.9, image: '/images/5.png', category: 'Office', barcode: '8017486106678' },
+  { id: 6, name: 'Mystery Novel', price: 7.99, image: '/images/6.png', category: 'Books', barcode: '2000000000006' },
+  { id: 7, name: 'Science Textbook', price: 24.5, image: '/images/7.png', category: 'Books', barcode: '2000000000007' }
 ];
 
 // Generate extra dummy products (120 more), reuse images 1..35 and cycle categories
@@ -605,7 +627,8 @@ const extraArticles: Article[] = Array.from({ length: 120 }, (_v, idx) => {
     name: `Dummy Product ${id}`,
     price,
     image: `/images/${imgNum}.png`,
-    category: cat
+    category: cat,
+    barcode: String(2000000000000 + id)
   } satisfies Article;
 });
 
@@ -638,17 +661,132 @@ const receipt = ref<Article[]>([]);
 function addToReceipt(article: Article) {
   receipt.value.push(article);
 }
+// Audio feedback (single shared AudioContext)
+let audioCtx: AudioContext | null = null;
+function playAddBeep() {
+  try {
+    if (!audioCtx) {
+      // Some browsers (older Safari) expose webkitAudioContext; define a safe typed fallback.
+      type AudioContextConstructor = { new(): AudioContext };
+      const AC: AudioContextConstructor | undefined = (window as unknown as { AudioContext?: AudioContextConstructor }).AudioContext;
+      const WAC: AudioContextConstructor | undefined = (window as unknown as { webkitAudioContext?: AudioContextConstructor }).webkitAudioContext;
+      const Ctor = AC || WAC;
+      if (!Ctor) return; // environment unsupported
+      audioCtx = new Ctor();
+    }
+    if (audioCtx.state === 'suspended') {
+      // Attempt resume (may still be blocked until user gesture)
+      void audioCtx.resume().catch(() => {});
+    }
+    const duration = 0.09; // seconds
+    const osc = audioCtx.createOscillator();
+    const gain = audioCtx.createGain();
+    osc.type = 'triangle';
+    osc.frequency.value = 2093; // A6 high pitched retail-like beep
+    gain.gain.setValueAtTime(0.001, audioCtx.currentTime);
+    gain.gain.exponentialRampToValueAtTime(0.25, audioCtx.currentTime + 0.005);
+    gain.gain.exponentialRampToValueAtTime(0.0001, audioCtx.currentTime + duration);
+    osc.connect(gain).connect(audioCtx.destination);
+    osc.start();
+    osc.stop(audioCtx.currentTime + duration + 0.02);
+  } catch {
+    // ignore audio errors silently (no blocking)
+  }
+}
+// Barcode scan handling
+// --- Barcode normalization & validation (supports GTIN-8,12,13,14) ---
+function computeGTINCheckDigit(body: string): number {
+  // body: all digits except final check digit
+  // Weighting from rightmost moving left: 3,1,3,1...
+  let sum = 0;
+  for (let i = body.length - 1, pos = 0; i >= 0; i--, pos++) {
+    const d = body.charCodeAt(i) - 48;
+    if (d < 0 || d > 9) return -1; // invalid char
+    const weight = (pos % 2 === 0) ? 3 : 1; // start with 3 on rightmost
+    sum += d * weight;
+  }
+  const mod = sum % 10;
+  return (10 - mod) % 10;
+}
+function isValidGTIN(code: string): boolean {
+  if (!/^[0-9]+$/.test(code)) return false;
+  if (![8, 12, 13, 14].includes(code.length)) return false;
+  const body = code.slice(0, -1);
+  const check = computeGTINCheckDigit(body);
+  return check === (code.charCodeAt(code.length - 1) - 48);
+}
+function generateBarcodeCandidates(raw: string): string[] {
+  const candidates = new Set<string>();
+  const digits = raw.trim();
+  if (!digits) return [];
+  candidates.add(digits);
+  // UPC-A (12) => EAN-13 by prefixing 0
+  if (/^\d{12}$/.test(digits)) {
+    candidates.add('0' + digits);
+  }
+  // EAN-13 starting with 0 might correspond to UPC-A without leading 0
+  if (/^0\d{12}$/.test(digits)) {
+    candidates.add(digits.slice(1));
+  }
+  // GTIN-14: sometimes data set stores trimmed (drop leading) if leading is 0
+  if (/^0\d{13}$/.test(digits)) {
+    candidates.add(digits.slice(1)); // drop leading 0 -> EAN-13
+  }
+  return Array.from(candidates);
+}
+function handleDecodedBarcode(code: string): boolean {
+  const candidates = generateBarcodeCandidates(code);
+  let matched: Article | undefined;
+  for (const c of candidates) {
+    matched = articles.value.find(a => a.barcode === c);
+    if (matched) {
+        addToReceipt(matched);
+        playAddBeep();
+      $q.notify({ type: 'positive', message: `${matched.name} +1` });
+      return true;
+    }
+  }
+  // If no match and code appears to be GTIN but invalid checksum -> notify invalid
+  const primary = candidates[0] ?? code;
+  if (/^\d{8}$/.test(primary) || /^\d{12}$/.test(primary) || /^\d{13}$/.test(primary) || /^\d{14}$/.test(primary)) {
+    if (!isValidGTIN(primary)) {
+      $q.notify({ type: 'warning', message: `Invalid barcode checksum (${primary})` });
+      return false;
+    }
+  }
+  $q.notify({ type: 'warning', message: `Code ${primary} not found` });
+  return false;
+}
 // animated add
 // Use explicit QList instance type (component public instance) instead of any for ESLint compliance
 const receiptListRef = ref<InstanceType<typeof QList> | null>(null); // q-list component
 const lastAddedId = ref<number | null>(null);
+// Input performance helpers
+const isTouchDevice = ref<boolean>(false);
+const prefersReducedMotion = ref<boolean>(false);
+onMounted(() => {
+  try {
+    isTouchDevice.value = matchMedia('(pointer: coarse)').matches || 'ontouchstart' in window || navigator.maxTouchPoints > 0;
+  } catch { isTouchDevice.value = false; }
+  try {
+    prefersReducedMotion.value = matchMedia('(prefers-reduced-motion: reduce)').matches;
+  } catch { prefersReducedMotion.value = false; }
+});
 function handleAdd(article: Article, ev: MouseEvent) {
+  // Instant path for touch devices or when reduced motion is preferred
+  if (isTouchDevice.value || prefersReducedMotion.value) {
+    addToReceipt(article);
+    lastAddedId.value = article.id;
+    playAddBeep();
+    return;
+  }
   const card = (ev.currentTarget as HTMLElement) || null;
   const listComp = receiptListRef.value; // QList instance or null
   const listEl: HTMLElement | null = listComp ? (listComp.$el as HTMLElement) : null;
   if (!card || !listEl) {
     addToReceipt(article);
     lastAddedId.value = article.id;
+    playAddBeep();
     return;
   }
   // Capture non-null list element for use inside async callbacks without re-narrowing
@@ -656,6 +794,7 @@ function handleAdd(article: Article, ev: MouseEvent) {
   const start = card.getBoundingClientRect();
   addToReceipt(article);
   lastAddedId.value = article.id;
+  playAddBeep();
   // Wait for receipt DOM update so the target line exists / updated
   void nextTick(() => {
   const targetLine = document.querySelector<HTMLElement>(`.receipt-list [data-line-id="${article.id}"]`);
@@ -696,6 +835,7 @@ function handleAdd(article: Article, ev: MouseEvent) {
   });
 }
 import { useI18n } from 'vue-i18n';
+import CameraScanner from '../components/CameraScanner.vue';
 const { t } = useI18n();
 // const router = useRouter();
 // Mobile receipt dialog state
@@ -820,8 +960,9 @@ function handleDocumentClick(ev: MouseEvent) {
     openFabId.value = null;
   }
 }
-onMounted(() => document.addEventListener('click', handleDocumentClick));
-onBeforeUnmount(() => document.removeEventListener('click', handleDocumentClick));
+const passiveClickOptions: AddEventListenerOptions = { passive: true };
+onMounted(() => document.addEventListener('click', handleDocumentClick, passiveClickOptions));
+onBeforeUnmount(() => document.removeEventListener('click', handleDocumentClick, passiveClickOptions));
 
 
 const editDialog = ref(false);
@@ -1244,6 +1385,53 @@ watch(holds, (val) => {
 const totalReductionDialog = ref(false);
 const totalReductionKind = ref<'percent' | 'amount'>('percent');
 const totalReductionValueStr = ref<string>('');
+// Scanner dialog state
+const scannerDialog = ref(false);
+function openScanner() { scannerDialog.value = true; }
+function onScannerDecoded(code: string) {
+  void handleDecodedBarcode(code);
+}
+
+// Classic hardware (keyboard wedge) barcode listener
+const wedgeBuffer = ref('');
+let wedgeLast = 0;
+const WEDGE_TIMEOUT_MS = 90;
+function isLikelyBarcodeSequence(delta: number) { return delta < WEDGE_TIMEOUT_MS; }
+function flushWedge() {
+  const raw = wedgeBuffer.value.trim();
+  wedgeBuffer.value = '';
+  if (!raw) return;
+  const candidates = generateBarcodeCandidates(raw);
+  for (const c of candidates) {
+    if (handleDecodedBarcode(c)) return; // stop on first success
+  }
+  // If none succeeded, handleDecodedBarcode already produced a notification for first candidate
+}
+function onGlobalWedgeKey(e: KeyboardEvent) {
+  const target = e.target as HTMLElement | null;
+  if (target && target.closest('input,textarea,[contenteditable=true],.q-field')) return;
+  const now = performance.now();
+  const delta = now - wedgeLast;
+  wedgeLast = now;
+  if (e.key === 'Enter') {
+    flushWedge();
+    return;
+  }
+  if (e.key.length === 1 && /[0-9A-Za-z]/.test(e.key)) {
+    if (!isLikelyBarcodeSequence(delta)) {
+      // New sequence
+      wedgeBuffer.value = '';
+    }
+    wedgeBuffer.value += e.key;
+    // Heuristic: if length reaches 13 and next likely terminator imminent, we still wait for Enter
+    if (wedgeBuffer.value.length >= 16) {
+      // Fallback flush for long raw codes without Enter (some scanners can be configured w/out terminator)
+      flushWedge();
+    }
+  }
+}
+onMounted(() => window.addEventListener('keydown', onGlobalWedgeKey));
+onBeforeUnmount(() => window.removeEventListener('keydown', onGlobalWedgeKey));
 function openTotalReduction() {
   const r = totalReduction.value;
   if (r == null) {
@@ -1323,6 +1511,7 @@ function deleteTotalReduction() {
 .products-scroll { position: relative; z-index: 0; }
 /* Reserve space for vertical scrollbar so 6th column doesn't get squeezed */
 .products-scroll { scrollbar-gutter: stable both-edges; }
+.products-scroll, .receipt-body { contain: content; }
 .search-menu-content {
   z-index: 250; /* above list, below dialogs */
 }
@@ -1542,6 +1731,11 @@ function deleteTotalReduction() {
     font-size: 1.25rem;
   }
   .nkey { min-height: 36px; }
+}
+
+/* Improve touch responsiveness */
+:deep(.q-btn), :deep(.q-tab), :deep(.q-fab), :deep(.q-item), .product-card {
+  touch-action: manipulation;
 }
 
 </style>
