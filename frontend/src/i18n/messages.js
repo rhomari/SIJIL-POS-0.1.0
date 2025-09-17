@@ -29,6 +29,19 @@ export default {
   ,PARAMS: "Parameters"
   ,theme: "Theme"
   ,help: "Help"
+  ,pos: {
+    searchCategoriesOrProducts: "Search categories or products",
+    totalDiscount: "Total Discount",
+    itemDiscount: "Item Discount",
+    enterDiscountPercent: "Enter discount %",
+    enterDiscountAmount: "Enter discount amount",
+    itemNote: "Item Note",
+    addNotePlaceholder: "Add a note...",
+    scanBarcode: "Scan Barcode"
+  ,more: "More"
+  ,barcodeInvalidChecksum: "Invalid barcode checksum ({code})"
+  ,barcodeNotFound: "Code {code} not found"
+  }
   ,settings: "Settings"
   ,logout: "Logout"
   ,pm: {
@@ -108,6 +121,19 @@ export default {
   ,PARAMS: "Paramètres"
   ,theme: "Thème"
   ,help: "Aide"
+  ,pos: {
+    searchCategoriesOrProducts: "Rechercher catégories ou produits",
+    totalDiscount: "Remise totale",
+    itemDiscount: "Remise article",
+    enterDiscountPercent: "Entrer remise %",
+    enterDiscountAmount: "Entrer montant remise",
+    itemNote: "Note article",
+    addNotePlaceholder: "Ajouter une note...",
+    scanBarcode: "Scanner le code-barres"
+  ,more: "Plus"
+  ,barcodeInvalidChecksum: "Code-barres invalide ({code})"
+  ,barcodeNotFound: "Code {code} introuvable"
+  }
   ,settings: "Paramètres"
   ,logout: "Déconnexion"
   ,pm: {
@@ -187,6 +213,19 @@ export default {
   ,PARAMS: "الإعدادات"
   ,theme: "السمة"
   ,help: "مساعدة"
+  ,pos: {
+    searchCategoriesOrProducts: "بحث في التصنيفات أو المنتجات",
+    totalDiscount: "الخصم الإجمالي",
+    itemDiscount: "خصم العنصر",
+    enterDiscountPercent: "أدخل نسبة الخصم %",
+    enterDiscountAmount: "أدخل مبلغ الخصم",
+    itemNote: "ملاحظة العنصر",
+    addNotePlaceholder: "أضف ملاحظة...",
+    scanBarcode: "مسح الباركود"
+  ,more: "المزيد"
+  ,barcodeInvalidChecksum: "رمز باركود غير صالح ({code})"
+  ,barcodeNotFound: "الرمز {code} غير موجود"
+  }
   ,settings: "الإعدادات"
   ,logout: "تسجيل الخروج"
   ,pm: {

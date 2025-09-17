@@ -26,7 +26,7 @@
                   outlined
                   clearable
                   debounce="200"
-                  placeholder="Search categories or products"
+                  :placeholder="$t('pos.searchCategoriesOrProducts')"
                   class="search-glow"
                   autofocus
                 >
@@ -37,7 +37,7 @@
               </div>
             </q-menu>
           </div>
-          <q-btn-dropdown v-if="overflowCategories.length" dense flat icon="more_horiz" label="More" class="text-primary" content-class="text-primary">
+          <q-btn-dropdown v-if="overflowCategories.length" dense flat icon="more_horiz" :label="$t('pos.more')" class="text-primary" content-class="text-primary">
             <q-list style="min-width: 160px;">
               <q-item v-for="cat in overflowCategories" :key="cat" clickable v-close-popup @click="selectedCategory = cat">
                 <q-item-section>{{ cat }}</q-item-section>
@@ -111,17 +111,21 @@
             <div class="row items-center no-wrap">
               <div class="text-h6">{{ $t('receipt') }}</div>
               <q-space />
+              <q-btn dense flat icon="person" size="sm" :label="selectedCustomer ? selectedCustomer.name : $t('customer')" @click="openCustomerDialog" :color="selectedCustomer ? 'primary' : 'grey-7'" class="q-mr-sm" />
               <q-btn dense flat icon="playlist_add_check" size="sm" :label="$t('holdList') + ' (' + holds.length + ')'" @click="openHoldList" />
             </div>
           </q-card-section>
           <q-separator />
           <div class="relative-position receipt-body">
             <q-list ref="receiptListRef" class="receipt-list">
-              <q-item v-for="item in groupedReceipt" :key="item.id" :data-line-id="item.id"
+              <q-item v-for="item in orderedLines" :key="item.id" :data-line-id="item.id"
                 draggable="true"
                 @dragstart="onDragStart(item.id)"
                 @dragend="onDragEnd"
-                :class="{ 'dragging': draggingId === item.id, 'receipt-added': lastAddedId === item.id }"
+                @dragenter="onReorderDragEnter(item.id)"
+                @dragover.prevent
+                @drop.stop.prevent="onReorderDrop(item.id)"
+                :class="{ 'dragging': draggingId === item.id, 'receipt-added': lastAddedId === item.id, 'reorder-over': reorderOverId === item.id, 'reorder-dragging': reorderDragId === item.id }"
               >
                 <q-item-section avatar>
                   <q-fab
@@ -156,31 +160,19 @@
                     <q-icon name="notes" size="16px" class="q-mr-xs" /> {{ notesById[item.id] }}
                   </div>
                 </q-item-section>
+                <q-item-section side class="q-pl-xs">
+                  <q-icon name="drag_indicator" class="reorder-handle" draggable="true"
+                    @dragstart.stop="onReorderHandleStart(item.id, $event)" />
+                </q-item-section>
               </q-item>
             </q-list>
-            <!-- Floating trash can (old style: red glow while dragging) -->
-            <div
-              v-show="draggingId !== null"
-              class="trash-drop-zone fixed-center"
-              :class="{ 'trash-active': draggingId !== null }"
-              @dragover.prevent
-              @drop="onDropTrash"
-              :style="draggingId !== null ? 'z-index:1100;pointer-events:auto;' : 'pointer-events:none;'"
-            >
-              <q-icon
-                name="delete"
-                :color="draggingId !== null ? 'negative' : 'grey-6'"
-                size="64px"
-                :class="draggingId !== null ? 'q-animate-bounce' : ''"
-              />
-            </div>
           </div>
           
           <!-- Total Reduction Dialog -->
           <q-dialog v-model="totalReductionDialog">
             <q-card style="width:420px; max-width:95vw;" class="q-pa-sm">
               <q-card-section class="row items-center q-pb-none">
-                <div class="text-h6">Total Discount</div>
+                <div class="text-h6">{{ $t('pos.totalDiscount') }}</div>
                 <q-space />
                 <q-btn icon="close" flat round dense v-close-popup />
               </q-card-section>
@@ -206,7 +198,7 @@
                   outlined
                   dense
                   :suffix="totalReductionKind === 'percent' ? '%' : 'MAD'"
-                  :placeholder="totalReductionKind === 'percent' ? 'Enter discount %' : 'Enter discount amount'"
+                  :placeholder="totalReductionKind === 'percent' ? $t('pos.enterDiscountPercent') : $t('pos.enterDiscountAmount')"
                 />
               </q-card-section>
               <q-separator inset />
@@ -221,7 +213,7 @@
           <q-dialog v-model="reductionDialog">
             <q-card style="width:420px; max-width:95vw;" class="q-pa-sm">
               <q-card-section class="row items-center q-pb-none">
-                <div class="text-h6">Item Discount</div>
+                <div class="text-h6">{{ $t('pos.itemDiscount') }}</div>
                 <q-space />
                 <q-btn icon="close" flat round dense v-close-popup />
               </q-card-section>
@@ -248,7 +240,7 @@
                   outlined
                   dense
                   :suffix="reductionKind === 'percent' ? '%' : 'MAD'"
-                  :placeholder="reductionKind === 'percent' ? 'Enter discount %' : 'Enter discount amount'"
+                  :placeholder="reductionKind === 'percent' ? $t('pos.enterDiscountPercent') : $t('pos.enterDiscountAmount')"
                   class="q-mt-sm"
                 />
               </q-card-section>
@@ -263,7 +255,7 @@
           <q-dialog v-model="editDialog">
             <q-card style="width:320px; max-width:90vw;" class="q-pa-sm">
               <q-card-section class="row items-center q-pb-none">
-                <div class="text-h6">Edit Quantity</div>
+                <div class="text-h6">{{ $t('editQuantity') }}</div>
                 <q-space />
                 <q-btn icon="close" flat round dense v-close-popup />
               </q-card-section>
@@ -307,13 +299,13 @@
           <q-dialog v-model="noteDialog">
             <q-card style="width:420px; max-width:95vw;" class="q-pa-sm">
               <q-card-section class="row items-center q-pb-none">
-                <div class="text-h6">Item Note</div>
+                <div class="text-h6">{{ $t('pos.itemNote') }}</div>
                 <q-space />
                 <q-btn icon="close" flat round dense v-close-popup />
               </q-card-section>
               <q-card-section class="q-pt-sm">
                 <div class="text-subtitle2 text-primary">{{ noteLineName }}</div>
-                <q-input v-model="noteText" type="textarea" autogrow outlined dense placeholder="Add a note..." />
+                <q-input v-model="noteText" type="textarea" autogrow outlined dense :placeholder="$t('pos.addNotePlaceholder')" />
               </q-card-section>
               <q-separator inset />
               <q-card-actions align="right">
@@ -330,6 +322,9 @@
                 <q-icon name="receipt_long" size="18px" class="q-mr-sm" />
                 <span class="total-label">{{ $t('total') }}</span>
               </div>
+              <q-chip v-if="selectedCustomer" dense color="primary" text-color="white" class="q-ml-sm" removable @remove="clearSelectedCustomer">
+                <q-icon name="person" size="16px" class="q-mr-xs" /> {{ selectedCustomer.name }}
+              </q-chip>
               <q-btn dense flat round icon="local_offer" class="q-ml-sm" :color="hasTotalReduction ? 'info' : 'grey-7'" @click="openTotalReduction" />
               <q-space />
               <div class="total-amount row items-end no-wrap">
@@ -393,12 +388,13 @@
       </div>
     </div>
   <!-- Mobile Receipt Dialog (bottom sheet) -->
-    <q-dialog v-model="receiptDialog" position="bottom" transition-show="slide-up" transition-hide="slide-down">
-      <q-card style="width: 100vw; max-width: 100vw; max-height: 85vh;" class="q-pa-none">
+  <q-dialog v-model="receiptDialog" position="bottom" transition-show="slide-up" transition-hide="slide-down">
+    <q-card style="width: 100vw; max-width: 100vw; max-height: 85vh;" class="q-pa-none">
         <q-card-section class="bg-grey-2">
           <div class="row items-center no-wrap">
             <div class="text-h6">{{ $t('receipt') }}</div>
             <q-space />
+            <q-btn dense flat icon="person" size="sm" :label="selectedCustomer ? selectedCustomer.name : $t('customer')" @click="openCustomerDialog" :color="selectedCustomer ? 'primary' : 'grey-7'" class="q-mr-sm" />
             <q-btn dense flat icon="playlist_add_check" size="sm" :label="$t('holdList') + ' (' + holds.length + ')'" @click="openHoldFromMobile" />
             <q-btn flat round dense icon="close" v-close-popup class="q-ml-sm" />
           </div>
@@ -406,7 +402,10 @@
         <q-separator />
         <div class="relative-position" style="overflow-y: auto; max-height: calc(85vh - 160px);">
           <q-list class="receipt-list q-px-sm q-pt-sm">
-            <q-item v-for="item in groupedReceipt" :key="item.id" :data-line-id="item.id">
+            <q-item v-for="item in orderedLines" :key="item.id" :data-line-id="item.id"
+              @dragenter="onReorderDragEnter(item.id)" @dragover.prevent @drop.stop.prevent="onReorderDrop(item.id)"
+              :class="{ 'reorder-over': reorderOverId === item.id, 'reorder-dragging': reorderDragId === item.id }"
+            >
               <q-item-section avatar>
                 <q-fab
                   color="primary"
@@ -440,6 +439,10 @@
                   <q-icon name="notes" size="16px" class="q-mr-xs" /> {{ notesById[item.id] }}
                 </div>
               </q-item-section>
+              <q-item-section side class="q-pl-xs">
+                <q-icon name="drag_indicator" class="reorder-handle" draggable="true"
+                  @dragstart.stop="onReorderHandleStart(item.id, $event)" />
+              </q-item-section>
             </q-item>
           </q-list>
         </div>
@@ -450,6 +453,9 @@
               <q-icon name="receipt_long" size="18px" class="q-mr-sm" />
               <span class="total-label">{{ $t('total') }}</span>
             </div>
+            <q-chip v-if="selectedCustomer" dense color="primary" text-color="white" class="q-ml-sm" removable @remove="clearSelectedCustomer">
+              <q-icon name="person" size="16px" class="q-mr-xs" /> {{ selectedCustomer.name }}
+            </q-chip>
             <q-btn dense flat round icon="local_offer" class="q-ml-sm" :color="hasTotalReduction ? 'info' : 'grey-7'" @click="openTotalReduction" />
             <q-space />
             <div class="total-amount row items-end no-wrap">
@@ -509,81 +515,240 @@
             
           </div>
         </q-card-section>
-      </q-card>
-    </q-dialog>
-    <q-dialog v-model="scannerDialog" maximized>
-      <q-card class="q-pa-md">
-        <q-card-section class="row items-center q-pb-none">
-          <div class="text-h6">{{$t('scan') }}</div>
-          <q-space />
-          <q-btn flat round dense icon="close" v-close-popup />
+    </q-card>
+  </q-dialog>
+  <!-- Mobile Receipt Dialog (bottom sheet) -->
+  <q-dialog v-model="receiptDialog" position="bottom" transition-show="slide-up" transition-hide="slide-down">
+    <q-card style="width: 100vw; max-width: 100vw; max-height: 85vh;" class="q-pa-none">
+        <q-card-section class="bg-grey-2">
+          <div class="row items-center no-wrap">
+            <div class="text-h6">{{ $t('receipt') }}</div>
+            <q-space />
+            <q-btn dense flat icon="person" size="sm" :label="selectedCustomer ? selectedCustomer.name : $t('customer')" @click="openCustomerDialog" :color="selectedCustomer ? 'primary' : 'grey-7'" class="q-mr-sm" />
+            <q-btn dense flat icon="playlist_add_check" size="sm" :label="$t('holdList') + ' (' + holds.length + ')'" @click="openHoldFromMobile" />
+            <q-btn flat round dense icon="close" v-close-popup class="q-ml-sm" />
+          </div>
         </q-card-section>
-        <q-card-section class="q-pt-sm flex flex-center">
-          <CameraScanner @decoded="onScannerDecoded" @close="scannerDialog=false" />
+        <q-separator />
+        <div class="relative-position" style="overflow-y: auto; max-height: calc(85vh - 160px);">
+          <q-list class="receipt-list q-px-sm q-pt-sm">
+            <q-item v-for="item in orderedLines" :key="item.id" :data-line-id="item.id"
+              @dragenter="onReorderDragEnter(item.id)" @dragover.prevent @drop.stop.prevent="onReorderDrop(item.id)"
+              :class="{ 'reorder-over': reorderOverId === item.id, 'reorder-dragging': reorderDragId === item.id }"
+            >
+              <q-item-section avatar>
+                <q-fab
+                  color="primary"
+                  text-color="white"
+                  :label="item.qty.toString()"
+                  padding="xs"
+                  dense
+                  direction="right"
+                  icon="more_vert"
+                  class="receipt-fab"
+                  :model-value="openFabId === item.id"
+                  @update:model-value="val => toggleFab(item.id, val)"
+                >
+                  <q-fab-action color="primary" icon="add" @click.stop="increment(item.id)" />
+                  <q-fab-action color="primary" icon="remove" :disable="item.qty <= 0" @click.stop="decrement(item.id)" />
+                  <q-fab-action color="secondary" icon="edit" @click.stop="openEdit(item)" />
+                  <q-fab-action color="info" icon="local_offer" @click.stop="openReduction(item)" />
+                  <q-fab-action color="accent" icon="edit_note" @click.stop="openNote(item)" />
+                  <q-fab-action color="negative" icon="delete" @click.stop="deleteLine(item.id)" />
+                </q-fab>
+              </q-item-section>
+              <q-item-section>
+                <div class="row items-center justify-between w-100">
+                  <span>{{ item.name }}</span>
+                  <span class="text-weight-bold">{{ lineTotal(item).toFixed(2) }} MAD</span>
+                </div>
+                <div v-if="hasReduction(item.id)" class="text-caption text-grey-7 q-mt-xs">
+                  <q-icon name="local_offer" size="16px" class="q-mr-xs" /> {{ reductionLabel(item.id) }}
+                </div>
+                <div v-if="notesById[item.id]" class="text-caption text-grey-7 q-mt-xs ellipsis">
+                  <q-icon name="notes" size="16px" class="q-mr-xs" /> {{ notesById[item.id] }}
+                </div>
+              </q-item-section>
+              <q-item-section side class="q-pl-xs">
+                <q-icon name="drag_indicator" class="reorder-handle" draggable="true"
+                  @dragstart.stop="onReorderHandleStart(item.id, $event)" />
+              </q-item-section>
+            </q-item>
+          </q-list>
+        </div>
+        <q-separator />
+        <q-card-section>
+          <div class="total-summary row items-center no-wrap q-mb-sm">
+            <div class="total-chip row items-center no-wrap">
+              <q-icon name="receipt_long" size="18px" class="q-mr-sm" />
+              <span class="total-label">{{ $t('total') }}</span>
+            </div>
+            <q-chip v-if="selectedCustomer" dense color="primary" text-color="white" class="q-ml-sm" removable @remove="clearSelectedCustomer">
+              <q-icon name="person" size="16px" class="q-mr-xs" /> {{ selectedCustomer.name }}
+            </q-chip>
+            <q-btn dense flat round icon="local_offer" class="q-ml-sm" :color="hasTotalReduction ? 'info' : 'grey-7'" @click="openTotalReduction" />
+            <q-space />
+            <div class="total-amount row items-end no-wrap">
+              <span class="amount">{{ total.toFixed(2) }}</span>
+              <span class="currency q-ml-xs">MAD</span>
+            </div>
+          </div>
+          <div v-if="hasTotalReduction" class="row items-center text-caption text-grey-7 q-mb-sm">
+            <q-icon name="local_offer" size="16px" class="q-mr-xs" />
+            <span class="q-mr-sm">{{ totalReductionLabel }}</span>
+            <span>−{{ totalDiscountAmount.toFixed(2) }} MAD</span>
+          </div>
+          <div class="row q-col-gutter-sm">
+            <div class="col-6">
+              <q-btn
+                unelevated
+                color="positive"
+                icon="shopping_cart_checkout"
+                :label="$q.screen.lt.md ? undefined : $t('checkout')"
+                class="full-width"
+                :disable="groupedReceipt.length === 0"
+                @click="checkout"
+              />
+            </div>
+            <div class="col-6">
+              <q-btn
+                unelevated
+                color="negative"
+                icon="restart_alt"
+                :label="$q.screen.lt.md ? undefined : $t('reset')"
+                class="full-width"
+                :disable="groupedReceipt.length === 0"
+                @click="resetReceipt"
+              />
+            </div>
+            <div class="col-6 q-mt-sm">
+              <q-btn
+                unelevated
+                color="warning"
+                icon="pause_circle"
+                :label="$q.screen.lt.md ? undefined : $t('hold')"
+                class="full-width"
+                :disable="groupedReceipt.length === 0"
+                @click="putOnHold"
+              />
+            </div>
+            <div class="col-6 q-mt-sm">
+              <q-btn
+                unelevated
+                color="primary"
+                icon="add_shopping_cart"
+                :label="$q.screen.lt.md ? undefined : $t('newOrder')"
+                class="full-width"
+                @click="launchNewOrder"
+              />
+            </div>
+            
+          </div>
         </q-card-section>
-      </q-card>
-    </q-dialog>
-    
-    <!-- Hold List Dialog (global, works on all sizes) -->
-    <q-dialog v-model="holdListDialog">
-      <q-card style="width: 520px; max-width: 95vw;">
+    </q-card>
+  </q-dialog>
+  <!-- Customer Selection Dialog -->
+  <q-dialog v-model="customerDialog">
+      <q-card style="width:520px; max-width:95vw;" class="q-pa-sm">
         <q-card-section class="row items-center q-pb-none">
-          <div class="text-h6">{{ $t('holdList') }}</div>
+          <div class="text-h6">{{ $t('customer') }}</div>
           <q-space />
           <q-btn flat round dense icon="close" v-close-popup />
         </q-card-section>
         <q-card-section class="q-pt-sm">
-          <div v-if="holds.length === 0" class="text-grey-7">{{ $t('noHolds') }}</div>
-          <q-list v-else separator>
-            <q-item v-for="h in holds" :key="h.id">
+          <q-input v-model="customerSearch" dense outlined clearable debounce="150" :placeholder="$t('search') + '...'" />
+          <div class="row q-mt-sm q-col-gutter-sm">
+            <div class="col">
+              <q-input v-model="newCustomerName" dense outlined :placeholder="$t('name')" />
+            </div>
+            <div class="col">
+              <q-input v-model="newCustomerPhone" dense outlined :placeholder="$t('phone')" />
+            </div>
+            <div class="col-auto flex items-center">
+              <q-btn dense color="primary" icon="person_add" :disable="!canAddCustomer" @click="addCustomer" />
+            </div>
+          </div>
+          <q-list bordered separator class="q-mt-md" style="max-height:260px; overflow-y:auto;">
+            <q-item v-for="c in filteredCustomers" :key="c.id" clickable @click="selectCustomer(c.id)" :active="c.id === selectedCustomerId" active-class="bg-primary text-white">
               <q-item-section>
                 <div class="row items-center justify-between">
-                  <div class="text-subtitle2">#{{ h.id }}</div>
-                  <div class="text-caption text-grey-7">{{ formatDate(h.createdAt) }}</div>
-                </div>
-                <div class="row items-center justify-between q-mt-xs">
-                  <div class="text-body2">{{ h.lines.length }} {{ $t('items') }}</div>
-                  <div class="text-weight-bold">{{ h.total.toFixed(2) }} MAD</div>
+                  <span class="text-subtitle2">{{ c.name }}</span>
+                  <span class="text-caption">{{ c.phone }}</span>
                 </div>
               </q-item-section>
-              <q-item-section side>
-                <div class="column q-gutter-xs">
-                  <q-btn dense color="primary" :label="$t('resume')" @click="resumeHold(h.id)" />
-                  <q-btn dense color="negative" flat :label="$t('remove')" @click="removeHold(h.id)" />
-                </div>
+              <q-item-section side v-if="c.id === selectedCustomerId">
+                <q-icon name="check" />
               </q-item-section>
             </q-item>
+            <div v-if="filteredCustomers.length === 0" class="text-caption text-grey-7 q-pa-sm">{{ $t('noResults') }}</div>
           </q-list>
         </q-card-section>
+        <q-separator inset />
         <q-card-actions align="right">
+          <q-btn flat :label="$t('clear')" @click="clearSelectedCustomer" :disable="!selectedCustomer" />
           <q-btn flat :label="$t('close')" v-close-popup />
         </q-card-actions>
       </q-card>
-    </q-dialog>
+  </q-dialog>
+  <!-- Barcode / QR Scanner Dialog -->
+  <q-dialog v-model="scannerDialog">
+    <q-card style="width:640px; max-width:95vw;" class="q-pa-sm">
+      <q-card-section class="row items-center q-pb-none">
+  <div class="text-h6">{{ $t('pos.scanBarcode') }}</div>
+        <q-space />
+        <q-btn icon="close" flat round dense v-close-popup />
+      </q-card-section>
+      <q-separator />
+      <q-card-section class="q-pt-sm">
+        <div class="scanner-frame">
+          <CameraScanner @decoded="onScannerDecoded" />
+        </div>
+      </q-card-section>
+      <q-separator inset />
+      <q-card-actions align="right">
+        <q-btn flat :label="$t('close')" v-close-popup />
+      </q-card-actions>
+    </q-card>
+  </q-dialog>
   </q-page>
+  <!-- Global Teleported Trash Overlay to escape receipt pane stacking context -->
+  <teleport to="body">
+    <div v-show="draggingId !== null" class="trash-overlay">
+      <div
+        class="trash-drop-zone"
+        :class="{ 'trash-active': draggingId !== null }"
+        @dragover.prevent
+        @drop="onDropTrash"
+        :style="draggingId !== null ? 'pointer-events:auto;' : 'pointer-events:none;'"
+      >
+        <q-icon
+          name="delete"
+          :color="draggingId !== null ? 'negative' : 'grey-6'"
+          size="64px"
+          :class="draggingId !== null ? 'q-animate-bounce' : ''"
+        />
+      </div>
+    </div>
+  </teleport>
 </template>
 
 <script setup lang="ts">
-const draggingId = ref<number|null>(null);
-
-function onDragStart(id: number) {
-  draggingId.value = id;
-  // Optionally set drag image
-  // event.dataTransfer?.setDragImage(event.target as HTMLElement, 0, 0);
-}
-function onDragEnd() {
-  draggingId.value = null;
-}
-function onDropTrash() {
-  if (draggingId.value !== null) {
-    deleteLine(draggingId.value);
-    draggingId.value = null;
-  }
-}
 import { ref, computed, onMounted, onBeforeUnmount, nextTick, watch, type ComponentPublicInstance } from 'vue';
-// import { useRouter } from 'vue-router';
 import { useQuasar } from 'quasar';
 import type { QList } from 'quasar';
+import { useI18n } from 'vue-i18n';
+import CameraScanner from '../components/CameraScanner.vue';
+
+// Quasar & i18n
+const $q = useQuasar();
+const { t } = useI18n();
+
+// Drag delete state
+const draggingId = ref<number|null>(null);
+function onDragStart(id: number) { draggingId.value = id; }
+function onDragEnd() { draggingId.value = null; }
+
+// import { useRouter } from 'vue-router';
 
 const categories = [
   'Stationery', 'Books', 'Office', 'Gadgets', 'Supplies',
@@ -643,7 +808,8 @@ const filteredArticles = computed(() => {
   }
   return articles.value.filter((a: Article) => a.category === selectedCategory.value);
 });
-// Category filtering for tabs/dropdown
+
+// Category filtering for tabs/dropdown (define before watchers using it)
 const filteredCategories = computed<Category[]>(() => {
   const q = categorySearch.value.trim().toLowerCase();
   if (!q) return Array.from(categories);
@@ -657,10 +823,24 @@ const filteredCategories = computed<Category[]>(() => {
   return Array.from(categories).filter(c => merged.has(c));
 });
 
+// Show a limited number of category tabs based on breakpoint
+const maxTabs = computed(() => {
+  if ($q.screen.lt.sm) return 3;
+  if ($q.screen.lt.md) return 4;
+  if ($q.screen.lt.lg) return 6;
+  return 8;
+});
+const visibleCategories = computed(() => filteredCategories.value.slice(0, maxTabs.value));
+const overflowCategories = computed(() => filteredCategories.value.slice(maxTabs.value));
+watch([filteredCategories, maxTabs], () => {
+  const list = filteredCategories.value;
+  if (!list.includes(selectedCategory.value)) {
+    selectedCategory.value = list[0] ?? categories[0];
+  }
+});
+
 const receipt = ref<Article[]>([]);
-function addToReceipt(article: Article) {
-  receipt.value.push(article);
-}
+function addToReceipt(article: Article) { receipt.value.push(article); }
 // Audio feedback (single shared AudioContext)
 let audioCtx: AudioContext | null = null;
 function playAddBeep() {
@@ -750,11 +930,11 @@ function handleDecodedBarcode(code: string): boolean {
   const primary = candidates[0] ?? code;
   if (/^\d{8}$/.test(primary) || /^\d{12}$/.test(primary) || /^\d{13}$/.test(primary) || /^\d{14}$/.test(primary)) {
     if (!isValidGTIN(primary)) {
-      $q.notify({ type: 'warning', message: `Invalid barcode checksum (${primary})` });
+  $q.notify({ type: 'warning', message: t('pos.barcodeInvalidChecksum', { code: primary }) });
       return false;
     }
   }
-  $q.notify({ type: 'warning', message: `Code ${primary} not found` });
+  $q.notify({ type: 'warning', message: t('pos.barcodeNotFound', { code: primary }) });
   return false;
 }
 // animated add
@@ -834,9 +1014,6 @@ function handleAdd(article: Article, ev: MouseEvent) {
     setTimeout(() => { if (lastAddedId.value === article.id) lastAddedId.value = null; }, 1000);
   });
 }
-import { useI18n } from 'vue-i18n';
-import CameraScanner from '../components/CameraScanner.vue';
-const { t } = useI18n();
 // const router = useRouter();
 // Mobile receipt dialog state
 const receiptDialog = ref(false);
@@ -845,8 +1022,118 @@ const qtyOverrides = ref<Record<number, number>>({});
 // Optional per-line notes
 const notesById = ref<Record<number, string>>({});
 // Optional per-line reductions: percent or fixed amount (union for backward compatibility)
+// Quantity / line helpers
+function setLineQuantity(id: number, newQty: number) {
+  if (newQty <= 0) {
+    receipt.value = receipt.value.filter(a => a.id !== id);
+    const rest = { ...qtyOverrides.value }; delete rest[id]; qtyOverrides.value = rest; return;
+  }
+  qtyOverrides.value = { ...qtyOverrides.value, [id]: newQty };
+  if (!receipt.value.some(a => a.id === id)) {
+    const article = articles.value.find(a => a.id === id);
+    if (article) receipt.value.push(article);
+  }
+}
+const openFabId = ref<number|null>(null);
+function toggleFab(id: number, open: boolean) { openFabId.value = open ? id : (openFabId.value === id ? null : openFabId.value); }
+function increment(id: number) {
+  if (qtyOverrides.value[id] !== undefined) {
+    qtyOverrides.value = { ...qtyOverrides.value, [id]: (qtyOverrides.value[id] || 0) + 1 };
+  } else {
+    const article = articles.value.find(a => a.id === id); if (article) receipt.value.push(article);
+  }
+  void nextTick(() => { openFabId.value = id; });
+}
+function decrement(id: number) {
+  if (qtyOverrides.value[id] !== undefined) {
+    const next = Math.max(0, (qtyOverrides.value[id] || 0) - 1);
+    if (next <= 0) { deleteLine(id); } else { qtyOverrides.value = { ...qtyOverrides.value, [id]: next }; void nextTick(() => { openFabId.value = id; }); }
+  } else {
+    const index = receipt.value.findIndex(a => a.id === id); if (index !== -1) receipt.value.splice(index, 1);
+    const stillExists = receipt.value.some(a => a.id === id); void nextTick(() => { openFabId.value = stillExists ? id : null; });
+  }
+}
+function deleteLine(id: number) {
+  receipt.value = receipt.value.filter(a => a.id !== id);
+  if (qtyOverrides.value[id] !== undefined) { const rest = { ...qtyOverrides.value }; delete rest[id]; qtyOverrides.value = rest; }
+  if (reductionsById.value[id] !== undefined) { const restR = { ...reductionsById.value }; delete restR[id]; reductionsById.value = restR; }
+  if (notesById.value[id] !== undefined) { const restN = { ...notesById.value }; delete restN[id]; notesById.value = restN; }
+  if (openFabId.value === id) openFabId.value = null;
+}
+function onDropTrash() { if (draggingId.value !== null) { deleteLine(draggingId.value); draggingId.value = null; } }
 type Reduction = { kind: 'percent' | 'amount'; value: number };
 const reductionsById = ref<Record<number, number | Reduction>>({});
+
+// Note / reduction / edit dialogs state
+const editDialog = ref(false);
+const editLineId = ref<number|null>(null);
+const tempQtyStr = ref('');
+const editLineName = computed(() => {
+  if (editLineId.value == null) return '';
+  const line = groupedReceipt.value.find(l => l.id === editLineId.value);
+  return line ? line.name : '';
+});
+function openEdit(line: GroupedLine) { editLineId.value = line.id; tempQtyStr.value = String(line.qty ?? 0); editDialog.value = true; }
+function applyEdit() {
+  if (editLineId.value == null) return; const n = parseFloat(tempQtyStr.value.replace(',', '.'));
+  const newQty = Number.isFinite(n) ? Math.max(0, n) : 0; setLineQuantity(editLineId.value, newQty); editDialog.value = false;
+}
+function tap(ch: string) { if (ch === '.') { if (tempQtyStr.value.includes('.')) return; tempQtyStr.value = tempQtyStr.value === '' ? '0.' : tempQtyStr.value + '.'; return; } tempQtyStr.value += ch; }
+function backspace() { tempQtyStr.value = tempQtyStr.value.slice(0,-1); }
+function clearNumpad() { tempQtyStr.value = ''; }
+
+const noteDialog = ref(false);
+const noteLineId = ref<number|null>(null);
+const noteText = ref('');
+const noteLineName = computed(() => { if (noteLineId.value == null) return ''; const line = groupedReceipt.value.find(l => l.id === noteLineId.value); return line ? line.name : ''; });
+const hasSelectedNote = computed(() => noteLineId.value != null && Boolean(notesById.value[noteLineId.value]));
+function openNote(line: GroupedLine) { noteLineId.value = line.id; noteText.value = notesById.value[line.id] ?? ''; noteDialog.value = true; }
+function applyNote() { if (noteLineId.value == null) return; const id = noteLineId.value; const text = noteText.value.trim(); if (text) { notesById.value = { ...notesById.value, [id]: text }; } else { const rest = { ...notesById.value }; delete rest[id]; notesById.value = rest; } noteDialog.value = false; }
+function deleteNote() { if (noteLineId.value == null) return; const id = noteLineId.value; if (notesById.value[id] !== undefined) { const rest = { ...notesById.value }; delete rest[id]; notesById.value = rest; } noteDialog.value = false; }
+
+const reductionDialog = ref(false);
+const reductionLineId = ref<number|null>(null);
+const reductionKind = ref<'percent' | 'amount'>('percent');
+const reductionValueStr = ref('');
+const reductionLineName = computed(() => { if (reductionLineId.value == null) return ''; const line = groupedReceipt.value.find(l => l.id === reductionLineId.value); return line ? line.name : ''; });
+const hasSelectedReduction = computed(() => reductionLineId.value != null && hasReduction(reductionLineId.value));
+function openReduction(line: GroupedLine) {
+  reductionLineId.value = line.id; const current = reductionsById.value[line.id];
+  if (current == null) { reductionKind.value = 'percent'; reductionValueStr.value=''; }
+  else if (typeof current === 'number') { reductionKind.value='percent'; reductionValueStr.value=String(current); }
+  else { reductionKind.value=current.kind; reductionValueStr.value=String(current.value ?? ''); }
+  reductionDialog.value = true;
+}
+function applyReduction() {
+  if (reductionLineId.value == null) return; const id = reductionLineId.value; const n = parseFloat(String(reductionValueStr.value).replace(',', '.'));
+  if (reductionKind.value === 'percent') { const pct = Number.isFinite(n)? Math.max(0, Math.min(100,n)):0; if (pct>0){ reductionsById.value={...reductionsById.value,[id]:pct}; } else { const rest={...reductionsById.value}; delete rest[id]; reductionsById.value=rest; } }
+  else { const amt = Number.isFinite(n)? Math.max(0,n):0; if (amt>0){ reductionsById.value={...reductionsById.value,[id]:{kind:'amount', value:amt}}; } else { const rest={...reductionsById.value}; delete rest[id]; reductionsById.value=rest; } }
+  reductionDialog.value=false;
+}
+function deleteReduction() { if (reductionLineId.value == null) return; const id = reductionLineId.value; if (reductionsById.value[id] !== undefined) { const rest={...reductionsById.value}; delete rest[id]; reductionsById.value=rest; } reductionDialog.value=false; }
+
+// Total reduction dialog
+const totalReductionDialog = ref(false);
+const totalReductionKind = ref<'percent' | 'amount'>('percent');
+const totalReductionValueStr = ref('');
+function openTotalReduction() {
+  const r = totalReduction.value; if (r == null) { totalReductionKind.value='percent'; totalReductionValueStr.value=''; }
+  else if (typeof r === 'number') { totalReductionKind.value='percent'; totalReductionValueStr.value=String(r); }
+  else { totalReductionKind.value=r.kind; totalReductionValueStr.value=String(r.value ?? ''); }
+  totalReductionDialog.value = true;
+}
+function applyTotalReduction() {
+  const n = parseFloat(String(totalReductionValueStr.value).replace(',', '.'));
+  if (totalReductionKind.value === 'percent') { const pct = Number.isFinite(n)? Math.max(0, Math.min(100,n)):0; totalReduction.value = pct>0 ? pct : null; }
+  else { const amt = Number.isFinite(n)? Math.max(0,n):0; totalReduction.value = amt>0 ? { kind:'amount', value:amt } : null; }
+  totalReductionDialog.value=false;
+}
+function deleteTotalReduction() { totalReduction.value = null; totalReductionDialog.value=false; }
+
+// Scanner dialog
+const scannerDialog = ref(false);
+function openScanner() { scannerDialog.value = true; }
+function onScannerDecoded(code: string) { void handleDecodedBarcode(code); }
 
 type GroupedLine = Article & { qty: number };
 const groupedReceipt = computed<GroupedLine[]>(() => {
@@ -866,6 +1153,50 @@ const groupedReceipt = computed<GroupedLine[]>(() => {
     return (ov !== undefined) ? { ...line, qty: ov } : line;
   });
 });
+
+// --- Reordering state (depends on groupedReceipt) ---
+const lineOrder = ref<number[]>([]);
+const reorderDragId = ref<number|null>(null);
+const reorderOverId = ref<number|null>(null);
+const orderedLines = computed(() => {
+  const orderIndex = new Map(lineOrder.value.map((id, idx) => [id, idx] as const));
+  return groupedReceipt.value.slice().sort((a,b) => (orderIndex.get(a.id) ?? 0) - (orderIndex.get(b.id) ?? 0));
+});
+function syncLineOrder() {
+  const ids = groupedReceipt.value.map(l => l.id);
+  const existing = new Set(ids);
+  let changed = false;
+  const filtered = lineOrder.value.filter(id => existing.has(id));
+  if (filtered.length !== lineOrder.value.length) changed = true;
+  for (const id of ids) if (!filtered.includes(id)) { filtered.push(id); changed = true; }
+  if (changed) lineOrder.value = [...filtered];
+}
+watch(groupedReceipt, syncLineOrder);
+onMounted(syncLineOrder);
+function onReorderHandleStart(id: number, ev: DragEvent) {
+  reorderDragId.value = id;
+  reorderOverId.value = null;
+  try { ev.dataTransfer?.setData('text/plain', String(id)); } catch { /* ignore */ }
+}
+function onReorderDragEnter(id: number) {
+  if (reorderDragId.value != null && reorderDragId.value !== id) reorderOverId.value = id;
+}
+function onReorderDrop(targetId: number) {
+  if (reorderDragId.value != null && reorderDragId.value !== targetId) {
+    const from = lineOrder.value.indexOf(reorderDragId.value);
+    const to = lineOrder.value.indexOf(targetId);
+    if (from > -1 && to > -1) {
+      const updated = [...lineOrder.value];
+      const removed = updated.splice(from, 1);
+      if (removed.length) {
+        updated.splice(to, 0, removed[0]!);
+        lineOrder.value = updated;
+      }
+    }
+  }
+  reorderDragId.value = null;
+  reorderOverId.value = null;
+}
 
 // Reset filters on Escape key
 function onGlobalKeydown(e: KeyboardEvent) {
@@ -948,273 +1279,37 @@ const total = computed(() => {
   return Math.max(0, base - amt);
 });
 const totalDiscountAmount = computed(() => Math.max(0, subtotal.value - total.value));
-
-// --- FAB open/close with outside click ---
-const openFabId = ref<number|null>(null);
-function toggleFab(id: number, open: boolean) {
-  openFabId.value = open ? id : (openFabId.value === id ? null : openFabId.value);
-}
-function handleDocumentClick(ev: MouseEvent) {
-  const target = ev.target as HTMLElement;
-  if (!target.closest('.receipt-fab')) {
-    openFabId.value = null;
-  }
-}
-const passiveClickOptions: AddEventListenerOptions = { passive: true };
-onMounted(() => document.addEventListener('click', handleDocumentClick, passiveClickOptions));
-onBeforeUnmount(() => document.removeEventListener('click', handleDocumentClick, passiveClickOptions));
-
-
-const editDialog = ref(false);
-const editLineId = ref<number|null>(null);
-// string buffer for numpad input
-const tempQtyStr = ref<string>('');
-const editLineName = computed(() => {
-  if (editLineId.value == null) return '';
-  const line = groupedReceipt.value.find(l => l.id === editLineId.value);
-  return line ? line.name : '';
+// --- Customers ---
+interface Customer { id: number; name: string; phone?: string }
+const customers = ref<Customer[]>([
+  { id: 1, name: 'Walk-in', phone: '' },
+  { id: 2, name: 'Alice Martin', phone: '0612-345-678' },
+  { id: 3, name: 'Bob Smith', phone: '0611-111-111' }
+]);
+const selectedCustomerId = ref<number | null>(1);
+const customerDialog = ref(false);
+const customerSearch = ref('');
+const newCustomerName = ref('');
+const newCustomerPhone = ref('');
+const selectedCustomer = computed(() => customers.value.find(c => c.id === selectedCustomerId.value) || null);
+const filteredCustomers = computed(() => {
+  const q = customerSearch.value.trim().toLowerCase();
+  if (!q) return customers.value;
+  return customers.value.filter(c => c.name.toLowerCase().includes(q) || (c.phone ?? '').toLowerCase().includes(q));
 });
-
-function openEdit(line: GroupedLine) {
-  editLineId.value = line.id;
-  tempQtyStr.value = String(line.qty ?? 0);
-  editDialog.value = true;
+const canAddCustomer = computed(() => newCustomerName.value.trim().length >= 2);
+function openCustomerDialog() { customerDialog.value = true; }
+function selectCustomer(id: number) { selectedCustomerId.value = id; customerDialog.value = false; }
+function clearSelectedCustomer() { selectedCustomerId.value = 1; }
+function addCustomer() {
+  if (!canAddCustomer.value) return;
+  const id = Date.now();
+  customers.value.push({ id, name: newCustomerName.value.trim(), phone: newCustomerPhone.value.trim() });
+  newCustomerName.value = '';
+  newCustomerPhone.value = '';
+  selectedCustomerId.value = id;
 }
-
-function applyEdit() {
-  if (editLineId.value == null) return;
-  const n = parseFloat(tempQtyStr.value.replace(',', '.'));
-  const newQty = Number.isFinite(n) ? Math.max(0, n) : 0;
-  setLineQuantity(editLineId.value, newQty);
-  editDialog.value = false;
-}
-
-// Numpad helpers
-function tap(ch: string) {
-  if (ch === '.') {
-    if (tempQtyStr.value.includes('.')) return;
-    tempQtyStr.value = tempQtyStr.value === '' ? '0.' : tempQtyStr.value + '.';
-    return;
-  }
-  // digits
-  tempQtyStr.value += ch;
-}
-function backspace() {
-  tempQtyStr.value = tempQtyStr.value.slice(0, -1);
-}
-function clearNumpad() {
-  tempQtyStr.value = '';
-}
-
-// Note editing
-const noteDialog = ref(false);
-const noteLineId = ref<number|null>(null);
-const noteText = ref<string>('');
-const noteLineName = computed(() => {
-  if (noteLineId.value == null) return '';
-  const line = groupedReceipt.value.find(l => l.id === noteLineId.value);
-  return line ? line.name : '';
-});
-const hasSelectedNote = computed(() => {
-  return noteLineId.value != null && Boolean(notesById.value[noteLineId.value]);
-});
-function openNote(line: GroupedLine) {
-  noteLineId.value = line.id;
-  noteText.value = notesById.value[line.id] ?? '';
-  noteDialog.value = true;
-}
-function applyNote() {
-  if (noteLineId.value == null) return;
-  const id = noteLineId.value;
-  const text = noteText.value.trim();
-  if (text) {
-    notesById.value = { ...notesById.value, [id]: text };
-  } else {
-    const rest = { ...notesById.value };
-    delete rest[id];
-    notesById.value = rest;
-  }
-  noteDialog.value = false;
-}
-function deleteNote() {
-  if (noteLineId.value == null) return;
-  const id = noteLineId.value;
-  if (notesById.value[id] !== undefined) {
-    const rest = { ...notesById.value };
-    delete rest[id];
-    notesById.value = rest;
-  }
-  noteDialog.value = false;
-}
-
-// Reduction editing
-const reductionDialog = ref(false);
-const reductionLineId = ref<number|null>(null);
-const reductionKind = ref<'percent' | 'amount'>('percent');
-const reductionValueStr = ref<string>('');
-const reductionLineName = computed(() => {
-  if (reductionLineId.value == null) return '';
-  const line = groupedReceipt.value.find(l => l.id === reductionLineId.value);
-  return line ? line.name : '';
-});
-const hasSelectedReduction = computed(() => {
-  return reductionLineId.value != null && hasReduction(reductionLineId.value);
-});
-function openReduction(line: GroupedLine) {
-  reductionLineId.value = line.id;
-  const current = reductionsById.value[line.id];
-  if (current == null) {
-    reductionKind.value = 'percent';
-    reductionValueStr.value = '';
-  } else if (typeof current === 'number') {
-    reductionKind.value = 'percent';
-    reductionValueStr.value = String(current);
-  } else {
-    reductionKind.value = current.kind;
-    reductionValueStr.value = String(current.value ?? '');
-  }
-  reductionDialog.value = true;
-}
-function applyReduction() {
-  if (reductionLineId.value == null) return;
-  const id = reductionLineId.value;
-  const n = parseFloat(String(reductionValueStr.value).replace(',', '.'));
-  if (reductionKind.value === 'percent') {
-    const pct = Number.isFinite(n) ? Math.max(0, Math.min(100, n)) : 0;
-    if (pct > 0) {
-      // store percent as a number for backward compatibility
-      reductionsById.value = { ...reductionsById.value, [id]: pct };
-    } else {
-      const rest = { ...reductionsById.value } as Record<number, number | Reduction>;
-      delete rest[id];
-      reductionsById.value = rest;
-    }
-  } else {
-    const amt = Number.isFinite(n) ? Math.max(0, n) : 0;
-    if (amt > 0) {
-      reductionsById.value = { ...reductionsById.value, [id]: { kind: 'amount', value: amt } };
-    } else {
-      const rest = { ...reductionsById.value } as Record<number, number | Reduction>;
-      delete rest[id];
-      reductionsById.value = rest;
-    }
-  }
-  reductionDialog.value = false;
-}
-function deleteReduction() {
-  if (reductionLineId.value == null) return;
-  const id = reductionLineId.value;
-  if (reductionsById.value[id] !== undefined) {
-    const rest = { ...reductionsById.value };
-    delete rest[id];
-    reductionsById.value = rest;
-  }
-  reductionDialog.value = false;
-}
-
-function setLineQuantity(id: number, newQty: number) {
-  if (newQty <= 0) {
-    // remove completely (and clear override)
-    receipt.value = receipt.value.filter(a => a.id !== id);
-  const rest = { ...qtyOverrides.value };
-  delete rest[id];
-  qtyOverrides.value = rest;
-    return;
-  }
-  // set override to allow decimals
-  qtyOverrides.value = { ...qtyOverrides.value, [id]: newQty };
-  // ensure at least one instance exists in receipt to render the line
-  const exists = receipt.value.some(a => a.id === id);
-  if (!exists) {
-    const article = articles.value.find(a => a.id === id);
-    if (article) receipt.value.push(article);
-  }
-}
-
-// QFab quantity controls
-function increment(id: number) {
-  if (qtyOverrides.value[id] !== undefined) {
-    qtyOverrides.value = { ...qtyOverrides.value, [id]: (qtyOverrides.value[id] || 0) + 1 };
-  } else {
-    const article = articles.value.find(a => a.id === id);
-    if (article) receipt.value.push(article);
-  }
-  // keep FAB open
-  void nextTick(() => { openFabId.value = id; });
-}
-function decrement(id: number) {
-  if (qtyOverrides.value[id] !== undefined) {
-    const next = Math.max(0, (qtyOverrides.value[id] || 0) - 1);
-    if (next <= 0) {
-      deleteLine(id);
-    } else {
-      qtyOverrides.value = { ...qtyOverrides.value, [id]: next };
-      void nextTick(() => { openFabId.value = id; });
-    }
-  } else {
-    const index = receipt.value.findIndex(a => a.id === id);
-    if (index !== -1) receipt.value.splice(index, 1);
-    // if still has items for this id, keep FAB open; else close
-    const stillExists = receipt.value.some(a => a.id === id);
-    void nextTick(() => { openFabId.value = stillExists ? id : null; });
-  }
-}
-function deleteLine(id: number) {
-  receipt.value = receipt.value.filter(a => a.id !== id);
-  if (qtyOverrides.value[id] !== undefined) {
-  const rest = { ...qtyOverrides.value };
-  delete rest[id];
-  qtyOverrides.value = rest;
-  }
-  if (reductionsById.value[id] !== undefined) {
-    const restR = { ...reductionsById.value };
-    delete restR[id];
-    reductionsById.value = restR;
-  }
-  if (notesById.value[id] !== undefined) {
-    const restN = { ...notesById.value };
-    delete restN[id];
-    notesById.value = restN;
-  }
-  if (openFabId.value === id) openFabId.value = null;
-}
-
-// --- Receipt actions (checkout, reset, hold, new order) ---
-const $q = useQuasar();
-// Show a limited number of category tabs based on breakpoint
-const maxTabs = computed(() => {
-  if ($q.screen.lt.sm) return 3; // xs
-  if ($q.screen.lt.md) return 4; // sm
-  if ($q.screen.lt.lg) return 6; // md
-  return 8; // lg+
-});
-const visibleCategories = computed(() => filteredCategories.value.slice(0, maxTabs.value));
-const overflowCategories = computed(() => filteredCategories.value.slice(maxTabs.value));
-// Ensure selected category is part of filtered list; if not, switch to first visible
-watch([filteredCategories, maxTabs], () => {
-  const list = filteredCategories.value;
-  const current = selectedCategory.value;
-  if (!list.includes(current)) {
-    const next = (list[0] ?? categories[0]);
-    selectedCategory.value = next;
-  }
-});
-// Simple ISO datetime formatter for display
-function formatDate(iso: string) {
-  try {
-    const d = new Date(iso);
-    return new Intl.DateTimeFormat(undefined, {
-      year: '2-digit', month: '2-digit', day: '2-digit',
-      hour: '2-digit', minute: '2-digit'
-    }).format(d);
-  } catch {
-    return iso;
-  }
-}
-const holds = ref<Array<{ id: number; lines: GroupedLine[]; total: number; createdAt: string }>>([]);
-const holdListDialog = ref(false);
-const orderCounter = ref(1);
-
+// ...existing code...
 function resetReceipt() {
   receipt.value = [];
   qtyOverrides.value = {};
@@ -1222,33 +1317,21 @@ function resetReceipt() {
   notesById.value = {};
   totalReduction.value = null;
 }
-
+// ...existing code...
+const holds = ref<Array<{ id: number; lines: GroupedLine[]; total: number; createdAt: string; notes?: Record<number,string>; reductions?: Record<number, number|Reduction>; totalReduction?: number|Reduction|null; customerId?: number | undefined }>>([]);
+const holdListDialog = ref(false);
+function openHoldList() { draggingId.value = null; openFabId.value = null; searchOpen.value = false; holdListDialog.value = true; }
+function openReceiptDialog() { draggingId.value = null; openFabId.value = null; searchOpen.value = false; receiptDialog.value = true; }
 function putOnHold() {
   if (groupedReceipt.value.length === 0) return;
   const snapshot: GroupedLine[] = groupedReceipt.value.map(l => ({ ...l }));
-  holds.value.push({
-    id: Date.now(),
-    lines: snapshot,
-    total: total.value,
-  createdAt: new Date().toISOString(),
-  // @ts-expect-error: extend object at runtime to include notes (backward compatible)
-  notes: { ...notesById.value },
-  reductions: { ...reductionsById.value },
-  totalReduction: totalReduction.value ?? null
-  });
+  holds.value.push({ id: Date.now(), lines: snapshot, total: total.value, createdAt: new Date().toISOString(), notes: { ...notesById.value }, reductions: { ...reductionsById.value }, totalReduction: totalReduction.value ?? null, customerId: selectedCustomerId.value || undefined });
   resetReceipt();
   $q.notify({ type: 'warning', message: t('holdPlaced') });
 }
-
-function launchNewOrder() {
-  orderCounter.value += 1;
-  resetReceipt();
-  $q.notify({ type: 'info', message: t('newOrderStarted') });
-}
-
+// ...existing code...
 function checkout() {
   if (groupedReceipt.value.length === 0) return;
-  // Build final receipt JSON and log it
   const normalizeReduction = (r: number | Reduction | null | undefined): Reduction | null => {
     if (r == null) return null;
     return typeof r === 'number' ? { kind: 'percent', value: r } : { kind: r.kind, value: r.value };
@@ -1266,9 +1349,11 @@ function checkout() {
       note: notesById.value[l.id] ?? undefined
     };
   });
+  const sc = selectedCustomer.value;
   const receiptJson = {
     createdAt: new Date().toISOString(),
     currency: 'MAD',
+    customer: sc ? { id: sc.id, name: sc.name, phone: sc.phone } : null,
     subtotal: subtotal.value,
     totalReduction: normalizeReduction(totalReduction.value),
     total: total.value,
@@ -1278,192 +1363,14 @@ function checkout() {
   $q.notify({ type: 'positive', message: t('checkoutComplete') });
   resetReceipt();
 }
+// ...existing code...
+// (removed unused removeHold helper to satisfy ESLint)
 
-// Holds: open list, resume, remove, persist
-function openHoldList() {
-  // prevent any overlay (drag zone, FAB, search) from sitting above dialog
-  draggingId.value = null;
-  openFabId.value = null;
-  searchOpen.value = false;
-  holdListDialog.value = true;
-}
-
-function openReceiptDialog() {
-  // Close overlays before opening the mobile receipt
-  draggingId.value = null;
-  openFabId.value = null;
-  searchOpen.value = false;
-  receiptDialog.value = true;
-}
-
-function openHoldFromMobile() {
-  receiptDialog.value = false;
-  // Small delay to allow dialog to close transition before opening next
-  setTimeout(() => {
-    openHoldList();
-  }, 200);
-}
-
-// Logout is handled globally in MainLayout via the footer button & login dialog
-
-function removeHold(id: number) {
-  holds.value = holds.value.filter(h => h.id !== id);
-}
-
-function resumeHold(id: number) {
-  const h = holds.value.find(x => x.id === id);
-  if (!h) return;
-  const doLoad = () => {
-    // reconstruct receipt from grouped lines
-    receipt.value = [];
-    qtyOverrides.value = {};
-    notesById.value = {};
-    totalReduction.value = null;
-    for (const line of h.lines) {
-      const base = articles.value.find(a => a.id === line.id) || {
-        id: line.id,
-        name: line.name,
-        price: line.price,
-        image: '/images/1.png',
-        category: ''
-      } as Article;
-      // ensure a visible line; use override for exact quantity
-      receipt.value.push(base);
-      qtyOverrides.value[line.id] = line.qty;
-    }
-    // restore notes if present
-    // @ts-expect-error: historical holds may not have notes
-    if (h.notes && typeof h.notes === 'object') {
-      // @ts-expect-error - runtime assign
-      notesById.value = { ...h.notes };
-    }
-    // restore reductions if present
-    // @ts-expect-error: historical holds may not have reductions
-    if (h.reductions && typeof h.reductions === 'object') {
-      // @ts-expect-error - runtime assign
-      reductionsById.value = { ...h.reductions };
-    }
-    // restore total reduction if present
-    // @ts-expect-error: historical holds may not have totalReduction
-    if (h.totalReduction !== undefined) {
-      // @ts-expect-error - runtime assign
-      totalReduction.value = h.totalReduction;
-    }
-    // remove the hold after loading
-    removeHold(id);
-    holdListDialog.value = false;
-    $q.notify({ type: 'info', message: t('resumedFromHold') });
-  };
-  if (groupedReceipt.value.length > 0) {
-    $q.dialog({
-      title: t('holdList'),
-      message: t('replaceCurrentOrderConfirm'),
-      cancel: true,
-      persistent: true
-    }).onOk(doLoad);
-  } else {
-    doLoad();
-  }
-}
-
-// persist holds in localStorage (simple persistence)
-const HOLDS_KEY = 'pos_holds_v1';
-onMounted(() => {
-  try {
-    const raw = localStorage.getItem(HOLDS_KEY);
-    if (raw) {
-      const parsed = JSON.parse(raw);
-      if (Array.isArray(parsed)) holds.value = parsed;
-    }
-  } catch { /* ignore */ }
-});
-watch(holds, (val) => {
-  try { localStorage.setItem(HOLDS_KEY, JSON.stringify(val)); } catch { /* ignore */ }
-}, { deep: true });
-
-// Total reduction dialog state and actions
-const totalReductionDialog = ref(false);
-const totalReductionKind = ref<'percent' | 'amount'>('percent');
-const totalReductionValueStr = ref<string>('');
-// Scanner dialog state
-const scannerDialog = ref(false);
-function openScanner() { scannerDialog.value = true; }
-function onScannerDecoded(code: string) {
-  void handleDecodedBarcode(code);
-}
-
-// Classic hardware (keyboard wedge) barcode listener
-const wedgeBuffer = ref('');
-let wedgeLast = 0;
-const WEDGE_TIMEOUT_MS = 90;
-function isLikelyBarcodeSequence(delta: number) { return delta < WEDGE_TIMEOUT_MS; }
-function flushWedge() {
-  const raw = wedgeBuffer.value.trim();
-  wedgeBuffer.value = '';
-  if (!raw) return;
-  const candidates = generateBarcodeCandidates(raw);
-  for (const c of candidates) {
-    if (handleDecodedBarcode(c)) return; // stop on first success
-  }
-  // If none succeeded, handleDecodedBarcode already produced a notification for first candidate
-}
-function onGlobalWedgeKey(e: KeyboardEvent) {
-  const target = e.target as HTMLElement | null;
-  if (target && target.closest('input,textarea,[contenteditable=true],.q-field')) return;
-  const now = performance.now();
-  const delta = now - wedgeLast;
-  wedgeLast = now;
-  if (e.key === 'Enter') {
-    flushWedge();
-    return;
-  }
-  if (e.key.length === 1 && /[0-9A-Za-z]/.test(e.key)) {
-    if (!isLikelyBarcodeSequence(delta)) {
-      // New sequence
-      wedgeBuffer.value = '';
-    }
-    wedgeBuffer.value += e.key;
-    // Heuristic: if length reaches 13 and next likely terminator imminent, we still wait for Enter
-    if (wedgeBuffer.value.length >= 16) {
-      // Fallback flush for long raw codes without Enter (some scanners can be configured w/out terminator)
-      flushWedge();
-    }
-  }
-}
-onMounted(() => window.addEventListener('keydown', onGlobalWedgeKey));
-onBeforeUnmount(() => window.removeEventListener('keydown', onGlobalWedgeKey));
-function openTotalReduction() {
-  const r = totalReduction.value;
-  if (r == null) {
-    totalReductionKind.value = 'percent';
-    totalReductionValueStr.value = '';
-  } else if (typeof r === 'number') {
-    totalReductionKind.value = 'percent';
-    totalReductionValueStr.value = String(r);
-  } else {
-    totalReductionKind.value = r.kind;
-    totalReductionValueStr.value = String(r.value ?? '');
-  }
-  totalReductionDialog.value = true;
-}
-function applyTotalReduction() {
-  const n = parseFloat(String(totalReductionValueStr.value).replace(',', '.'));
-  if (totalReductionKind.value === 'percent') {
-    const pct = Number.isFinite(n) ? Math.max(0, Math.min(100, n)) : 0;
-    totalReduction.value = pct > 0 ? pct : null;
-  } else {
-    const amt = Number.isFinite(n) ? Math.max(0, n) : 0;
-    totalReduction.value = amt > 0 ? { kind: 'amount', value: amt } : null;
-  }
-  totalReductionDialog.value = false;
-}
-function deleteTotalReduction() {
-  totalReduction.value = null;
-  totalReductionDialog.value = false;
-}
-
+// New order simply clears receipt and leaves selected customer (design choice)
+function launchNewOrder() { resetReceipt(); }
+function openHoldFromMobile() { openHoldList(); }
+// ...existing code...
 </script>
-
 
 <style scoped>
 /* Full-width mobile receipt bar (fixed above footer) */
@@ -1516,10 +1423,8 @@ function deleteTotalReduction() {
   z-index: 250; /* above list, below dialogs */
 }
 .trash-drop-zone {
-  position: fixed;
-  top: 50%;
-  left: 50%;
-  transform: translate(-50%, -50%) scale(.85);
+  position: relative; /* inside flex-centered overlay */
+  transform: scale(.85);
   width: 140px;
   height: 140px;
   border-radius: 50%;
@@ -1531,7 +1436,6 @@ function deleteTotalReduction() {
   box-shadow: 0 8px 24px rgba(0,0,0,0.18);
   transition: border-color .25s, box-shadow .25s, transform .25s, background .25s, opacity .25s;
   opacity: 0.2;
-  position: fixed;
   overflow: visible;
 }
 .trash-drop-zone::before,
@@ -1544,27 +1448,36 @@ function deleteTotalReduction() {
   box-shadow: 0 0 0 0 rgba(244,67,54,0.4);
   opacity: 0;
 }
-.trash-drop-zone.trash-active {
-  border-color: var(--q-negative);
-  opacity: 1;
-  transform: translate(-50%, -50%) scale(1);
-  animation: trashScale 0.35s ease-out;
+.trash-overlay {
+  position: fixed;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 10050;
+  pointer-events: none;
 }
+.trash-drop-zone.trash-active { border-color: var(--q-negative); opacity: 1; transform: scale(1); animation: trashScale 0.35s ease-out; }
 .trash-drop-zone.trash-active::before {
   animation: trashPulseRing 1.4s ease-out infinite;
 }
 .trash-drop-zone.trash-active::after {
   animation: trashPulseRing 1.4s ease-out .7s infinite;
 }
-@keyframes trashScale {
-  0% { transform: translate(-50%, -50%) scale(.6); }
-  100% { transform: translate(-50%, -50%) scale(1); }
-}
+  @keyframes trashScale {
+    0% { transform: scale(.6); }
+    100% { transform: scale(1); }
+  }
 @keyframes trashPulseRing {
   0% { box-shadow: 0 0 0 0 rgba(244,67,54,0.55); opacity: .9; }
   70% { box-shadow: 0 0 0 28px rgba(244,67,54,0); opacity: 0; }
   100% { box-shadow: 0 0 0 0 rgba(244,67,54,0); opacity: 0; }
 }
+  /* Reorder styles */
+  .reorder-handle { cursor: grab; opacity: .6; transition: opacity .2s; }
+  .reorder-handle:hover { opacity: 1; }
+  .reorder-dragging { opacity: .45; }
+  .reorder-over { outline: 2px dashed var(--q-primary); outline-offset: -2px; }
 .fly-clone {
   box-shadow: 0 4px 12px rgba(0,0,0,.25);
   transition: transform .55s cubic-bezier(.55,.06,.27,.99), opacity .55s ease;
