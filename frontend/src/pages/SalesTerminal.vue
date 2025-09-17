@@ -517,6 +517,40 @@
         </q-card-section>
     </q-card>
   </q-dialog>
+  <!-- Hold List Dialog -->
+  <q-dialog v-model="holdListDialog">
+    <q-card style="width:520px; max-width:95vw;" class="q-pa-sm">
+      <q-card-section class="row items-center q-pb-none">
+        <div class="text-h6">{{ $t('holdList') }}</div>
+        <q-space />
+        <q-btn flat round dense icon="close" v-close-popup />
+      </q-card-section>
+      <q-card-section class="q-pt-sm">
+        <div v-if="holds.length === 0" class="text-grey-7">{{ $t('noHolds') }}</div>
+        <q-list v-else bordered separator style="max-height:300px; overflow-y:auto;">
+          <q-item v-for="h in holds" :key="h.id" clickable @click="resumeHold(h.id)">
+            <q-item-section>
+              <div class="row items-center justify-between">
+                <span class="text-subtitle2">#{{ h.id }}</span>
+                <span class="text-caption">{{ h.total.toFixed(2) }} MAD</span>
+              </div>
+              <div class="row items-center justify-between text-caption q-mt-xs">
+                <span>{{ h.lines.length }} {{ $t('items') }}</span>
+                <span>{{ formatDate(h.createdAt) }}</span>
+              </div>
+            </q-item-section>
+            <q-item-section side>
+              <q-btn dense flat color="negative" icon="delete" @click.stop="removeHold(h.id)" />
+            </q-item-section>
+          </q-item>
+        </q-list>
+      </q-card-section>
+      <q-separator inset />
+      <q-card-actions align="right">
+        <q-btn flat :label="$t('close')" v-close-popup />
+      </q-card-actions>
+    </q-card>
+  </q-dialog>
   <!-- Mobile Receipt Dialog (bottom sheet) -->
   <q-dialog v-model="receiptDialog" position="bottom" transition-show="slide-up" transition-hide="slide-down">
     <q-card style="width: 100vw; max-width: 100vw; max-height: 85vh;" class="q-pa-none">
@@ -1328,6 +1362,47 @@ function putOnHold() {
   holds.value.push({ id: Date.now(), lines: snapshot, total: total.value, createdAt: new Date().toISOString(), notes: { ...notesById.value }, reductions: { ...reductionsById.value }, totalReduction: totalReduction.value ?? null, customerId: selectedCustomerId.value || undefined });
   resetReceipt();
   $q.notify({ type: 'warning', message: t('holdPlaced') });
+}
+function formatDate(iso: string) {
+  try {
+    const d = new Date(iso);
+    return new Intl.DateTimeFormat(undefined, { year: '2-digit', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit' }).format(d);
+  } catch { return iso; }
+}
+function resumeHold(id: number) {
+  const h = holds.value.find(x => x.id === id);
+  if (!h) return;
+  if (groupedReceipt.value.length > 0) {
+    $q.dialog({ title: t('holdList'), message: t('replaceCurrentOrderConfirm'), cancel: true, persistent: true }).onOk(() => loadHold(h));
+  } else {
+    loadHold(h);
+  }
+}
+function loadHold(h: { id: number; lines: GroupedLine[]; total: number; createdAt: string; notes?: Record<number,string>; reductions?: Record<number, number|Reduction>; totalReduction?: number|Reduction|null; customerId?: number | undefined }) {
+  resetReceipt();
+  for (const line of h.lines) {
+    const base = articles.value.find(a => a.id === line.id) || { id: line.id, name: line.name, price: line.price, image: '/images/1.png', category: '' } as Article;
+    receipt.value.push(base);
+    qtyOverrides.value[line.id] = line.qty;
+  }
+  if (h.notes) notesById.value = { ...h.notes };
+  if (h.reductions) reductionsById.value = { ...h.reductions };
+  if (h.totalReduction !== undefined) {
+    // h.totalReduction may be number | Reduction | null | undefined
+    const tr = h.totalReduction;
+    if (tr === null || typeof tr === 'number') {
+      totalReduction.value = tr;
+    } else if (typeof tr === 'object' && (tr.kind === 'percent' || tr.kind === 'amount')) {
+      totalReduction.value = { kind: tr.kind, value: tr.value };
+    }
+  }
+  if (h.customerId) selectedCustomerId.value = h.customerId;
+  removeHold(h.id);
+  holdListDialog.value = false;
+  $q.notify({ type: 'info', message: t('resumedFromHold') });
+}
+function removeHold(id: number) {
+  holds.value = holds.value.filter(h => h.id !== id);
 }
 // ...existing code...
 function checkout() {
