@@ -141,6 +141,12 @@ function footerLogout() {
           </q-item-section>
     <q-item-section>{{ $t('ARTICLES') }}</q-item-section>
         </q-item>
+        <q-item clickable v-ripple :to="{ name: 'customers' }">
+          <q-item-section avatar>
+            <q-icon name="people" />
+          </q-item-section>
+          <q-item-section>{{ $t('customers') }}</q-item-section>
+        </q-item>
         <q-item clickable v-ripple>
           <q-item-section avatar>
             <q-icon name="widgets" />

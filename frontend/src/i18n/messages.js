@@ -29,6 +29,7 @@ export default {
   ,PARAMS: "Parameters"
   ,theme: "Theme"
   ,help: "Help"
+  ,customers: "Customers"
   ,pos: {
     searchCategoriesOrProducts: "Search categories or products",
     totalDiscount: "Total Discount",
@@ -41,6 +42,7 @@ export default {
   ,more: "More"
   ,barcodeInvalidChecksum: "Invalid barcode checksum ({code})"
   ,barcodeNotFound: "Code {code} not found"
+  ,mostUsed: "Most Used"
   }
   ,settings: "Settings"
   ,logout: "Logout"
@@ -121,6 +123,7 @@ export default {
   ,PARAMS: "Paramètres"
   ,theme: "Thème"
   ,help: "Aide"
+  ,customers: "Clients"
   ,pos: {
     searchCategoriesOrProducts: "Rechercher catégories ou produits",
     totalDiscount: "Remise totale",
@@ -133,6 +136,7 @@ export default {
   ,more: "Plus"
   ,barcodeInvalidChecksum: "Code-barres invalide ({code})"
   ,barcodeNotFound: "Code {code} introuvable"
+  ,mostUsed: "Les plus utilisés"
   }
   ,settings: "Paramètres"
   ,logout: "Déconnexion"
@@ -213,6 +217,7 @@ export default {
   ,PARAMS: "الإعدادات"
   ,theme: "السمة"
   ,help: "مساعدة"
+  ,customers: "العملاء"
   ,pos: {
     searchCategoriesOrProducts: "بحث في التصنيفات أو المنتجات",
     totalDiscount: "الخصم الإجمالي",
@@ -225,6 +230,7 @@ export default {
   ,more: "المزيد"
   ,barcodeInvalidChecksum: "رمز باركود غير صالح ({code})"
   ,barcodeNotFound: "الرمز {code} غير موجود"
+  ,mostUsed: "الأكثر استخداماً"
   }
   ,settings: "الإعدادات"
   ,logout: "تسجيل الخروج"

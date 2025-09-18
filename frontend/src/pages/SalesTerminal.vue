@@ -6,6 +6,7 @@
         <div class="row items-center no-wrap q-gutter-sm">
           <div class="col">
             <q-tabs v-model="selectedCategory" class="text-primary" align="left" dense shrink>
+              <q-tab :name="MOST_USED" :label="$t('pos.mostUsed')" />
               <q-tab v-for="cat in visibleCategories" :key="cat" :name="cat" :label="cat" />
             </q-tabs>
             <!-- Search popup anchored to tabs container -->
@@ -784,12 +785,14 @@ function onDragEnd() { draggingId.value = null; }
 
 // import { useRouter } from 'vue-router';
 
+// Special pseudo-category for Most Used products (local usage stats for now; can be replaced with server stats later)
+const MOST_USED = '__MOST_USED__' as const;
 const categories = [
   'Stationery', 'Books', 'Office', 'Gadgets', 'Supplies',
   'Arts', 'Crafts', 'Paper', 'Ink', 'Hardware',
   'Software', 'Snacks', 'Beverages', 'Cleaning', 'Storage'
 ] as const;
-type Category = typeof categories[number];
+type Category = typeof categories[number] | typeof MOST_USED;
 const selectedCategory = ref<Category>(categories[0]);
 const categorySearch = ref<string>('');
 const searchInputRef = ref<ComponentPublicInstance | null>(null);
@@ -833,6 +836,27 @@ const extraArticles: Article[] = Array.from({ length: 120 }, (_v, idx) => {
 
 const articles = ref<Article[]>([...baseArticles, ...extraArticles]);
 
+// --- Usage tracking (local) ---
+const usageCounts = ref<Record<number, number>>({});
+function recordUsage(article: Article) {
+  usageCounts.value = {
+    ...usageCounts.value,
+    [article.id]: (usageCounts.value[article.id] || 0) + 1
+  };
+}
+
+const mostUsedArticles = computed<Article[]>(() => {
+  const entries = Object.entries(usageCounts.value)
+    .filter(([, count]) => count > 0)
+    .sort((a, b) => b[1] - a[1])
+    .slice(0, 60); // cap to 60 tiles
+  if (!entries.length) return [];
+  const byId = new Map(articles.value.map(a => [a.id, a] as const));
+  return entries
+    .map(([id]) => byId.get(Number(id)))
+    .filter((a): a is Article => Boolean(a));
+});
+
 const filteredArticles = computed(() => {
   const q = categorySearch.value.trim().toLowerCase();
   if (q) {
@@ -840,21 +864,29 @@ const filteredArticles = computed(() => {
       a.name.toLowerCase().includes(q) || a.category.toLowerCase().includes(q)
     );
   }
+  if (selectedCategory.value === MOST_USED) {
+    return mostUsedArticles.value;
+  }
   return articles.value.filter((a: Article) => a.category === selectedCategory.value);
 });
 
 // Category filtering for tabs/dropdown (define before watchers using it)
 const filteredCategories = computed<Category[]>(() => {
+  const base = Array.from(categories) as Category[];
   const q = categorySearch.value.trim().toLowerCase();
-  if (!q) return Array.from(categories);
-  const nameMatches = new Set(Array.from(categories).filter(c => c.toLowerCase().includes(q)));
-  const productMatches = new Set(
-    articles.value
-      .filter((a: Article) => a.name.toLowerCase().includes(q) || a.category.toLowerCase().includes(q))
-      .map(a => a.category as Category)
-  );
-  const merged = new Set<Category>([...Array.from(nameMatches), ...Array.from(productMatches)]);
-  return Array.from(categories).filter(c => merged.has(c));
+  let list: Category[];
+  if (!q) list = base; else {
+    const nameMatches = new Set(base.filter(c => c.toLowerCase().includes(q)));
+    const productMatches = new Set(
+      articles.value
+        .filter((a: Article) => a.name.toLowerCase().includes(q) || a.category.toLowerCase().includes(q))
+        .map(a => a.category as Category)
+    );
+    const merged = new Set<Category>([...Array.from(nameMatches), ...Array.from(productMatches)]);
+    list = base.filter(c => merged.has(c));
+  }
+  // Always put MOST_USED at the start
+  return [MOST_USED, ...list];
 });
 
 // Show a limited number of category tabs based on breakpoint
@@ -864,17 +896,21 @@ const maxTabs = computed(() => {
   if ($q.screen.lt.lg) return 6;
   return 8;
 });
-const visibleCategories = computed(() => filteredCategories.value.slice(0, maxTabs.value));
-const overflowCategories = computed(() => filteredCategories.value.slice(maxTabs.value));
+// filteredCategories already includes MOST_USED at index 0, but we don't want it duplicated in overflow logic.
+const visibleCategories = computed(() => filteredCategories.value.filter(c => c !== MOST_USED).slice(0, maxTabs.value));
+const overflowCategories = computed(() => filteredCategories.value.filter(c => c !== MOST_USED).slice(maxTabs.value));
 watch([filteredCategories, maxTabs], () => {
   const list = filteredCategories.value;
-  if (!list.includes(selectedCategory.value)) {
-    selectedCategory.value = list[0] ?? categories[0];
+  if (selectedCategory.value === MOST_USED) return; // always valid
+  // Exclude MOST_USED from fallback logic ordering
+  const withoutMost = list.filter(c => c !== MOST_USED);
+  if (!withoutMost.includes(selectedCategory.value)) {
+    selectedCategory.value = withoutMost[0] ?? MOST_USED;
   }
 });
 
 const receipt = ref<Article[]>([]);
-function addToReceipt(article: Article) { receipt.value.push(article); }
+function addToReceipt(article: Article) { receipt.value.push(article); recordUsage(article); }
 // Audio feedback (single shared AudioContext)
 let audioCtx: AudioContext | null = null;
 function playAddBeep() {
@@ -954,8 +990,8 @@ function handleDecodedBarcode(code: string): boolean {
   for (const c of candidates) {
     matched = articles.value.find(a => a.barcode === c);
     if (matched) {
-        addToReceipt(matched);
-        playAddBeep();
+  addToReceipt(matched);
+  playAddBeep();
       $q.notify({ type: 'positive', message: `${matched.name} +1` });
       return true;
     }
