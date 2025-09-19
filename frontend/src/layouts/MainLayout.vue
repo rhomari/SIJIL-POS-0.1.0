@@ -210,12 +210,12 @@ function footerLogout() {
         <q-card-section class="row items-center q-gutter-md">
           <q-icon name="signal_wifi_off" color="negative" size="48px" />
           <div>
-            <div class="text-h6">You are offline</div>
-            <div class="text-body2 text-grey-7 q-mt-xs">Waiting for network connection…</div>
+            <div class="text-h6">{{ $t('offline') }}</div>
+            <div class="text-body2 text-grey-7 q-mt-xs">{{ $t('offlineMessage') }}</div>
           </div>
         </q-card-section>
         <q-card-actions align="right">
-          <q-btn color="primary" :disable="true" label="Retry" />
+          <q-btn color="primary" :disable="true" :label="$t('retry')" />
         </q-card-actions>
       </q-card>
     </q-dialog>
@@ -226,17 +226,17 @@ function footerLogout() {
         <q-card-section class="row items-center q-gutter-md">
           <q-icon name="lock" color="primary" size="40px" />
           <div>
-            <div class="text-h6">Login</div>
-            <div class="text-caption text-grey-7">Please sign in to continue</div>
+            <div class="text-h6">{{ $t('login') }}</div>
+            <div class="text-caption text-grey-7">{{ $t('loginPrompt') }}</div>
           </div>
         </q-card-section>
         <q-card-section class="q-pt-none">
-          <q-input v-model="loginUsername" dense outlined label="Username" autofocus @keyup.enter="doLogin" />
-          <q-input v-model="loginPassword" type="password" dense outlined label="Password" class="q-mt-sm" @keyup.enter="doLogin" />
+          <q-input v-model="loginUsername" dense outlined :label="$t('username')" autofocus @keyup.enter="doLogin" />
+          <q-input v-model="loginPassword" type="password" dense outlined :label="$t('password')" class="q-mt-sm" @keyup.enter="doLogin" />
         </q-card-section>
         <q-card-actions align="right">
-          <q-btn flat label="Cancel" @click="showLoginDialog = false" />
-          <q-btn color="primary" label="Login" @click="doLogin" />
+          <q-btn flat :label="$t('cancel')" @click="showLoginDialog = false" />
+          <q-btn color="primary" :label="$t('login')" @click="doLogin" />
         </q-card-actions>
       </q-card>
     </q-dialog>

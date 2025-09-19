@@ -890,11 +890,12 @@ const filteredCategories = computed<Category[]>(() => {
 });
 
 // Show a limited number of category tabs based on breakpoint
+// Note: These numbers are for regular categories only, "Most Used" tab is always shown additionally
 const maxTabs = computed(() => {
-  if ($q.screen.lt.sm) return 3;
-  if ($q.screen.lt.md) return 4;
-  if ($q.screen.lt.lg) return 6;
-  return 8;
+  if ($q.screen.lt.sm) return 1;   // Small screens: 1 + Most Used = 2 total tabs
+  if ($q.screen.lt.md) return 2;   // Medium screens: 2 + Most Used = 3 total tabs
+  if ($q.screen.lt.lg) return 4;   // Large screens: 4 + Most Used = 5 total tabs
+  return 5;                        // Extra large screens: 5 + Most Used = 6 total tabs
 });
 // filteredCategories already includes MOST_USED at index 0, but we don't want it duplicated in overflow logic.
 const visibleCategories = computed(() => filteredCategories.value.filter(c => c !== MOST_USED).slice(0, maxTabs.value));
