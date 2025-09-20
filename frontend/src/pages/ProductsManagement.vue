@@ -528,7 +528,7 @@
 				message: ''
 			});
 			function getCategories() {
-				fetch('http://192.168.1.216:8080/api/categories', { method: 'GET' })
+				fetch('http://192.168.1.2:8080/api/categories', { method: 'GET' })
 					.then(res => {
 						if (!res.ok) throw new Error(`HTTP ${res.status}`);
 						return res.json();

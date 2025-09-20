@@ -90,12 +90,12 @@ onMounted(init);
 
 onBeforeUnmount(() => {
   try {
-    // Some builds expose stopContinuousDecode; guard before calling
+    
     if (typeof (reader as unknown as { stopContinuousDecode?: () => void }).stopContinuousDecode === 'function') {
       (reader as unknown as { stopContinuousDecode: () => void }).stopContinuousDecode();
     }
   } catch {
-    // ignore cleanup errors
+    // ignore
   }
   if (stream) {
     for (const track of stream.getTracks()) track.stop();

@@ -74,7 +74,9 @@ export default {
     enterDiscountAmount: "Enter discount amount",
     itemNote: "Item Note",
     addNotePlaceholder: "Add a note...",
-    scanBarcode: "Scan Barcode"
+    scanBarcode: "Scan Barcode",
+    swipeLeftToDelete: "Swipe left to delete",
+    dragHereToDelete: "Drag here to delete"
   ,more: "More"
   ,barcodeInvalidChecksum: "Invalid barcode checksum ({code})"
   ,barcodeNotFound: "Code {code} not found"
@@ -211,7 +213,9 @@ export default {
     enterDiscountAmount: "Entrer montant remise",
     itemNote: "Note article",
     addNotePlaceholder: "Ajouter une note...",
-    scanBarcode: "Scanner le code-barres"
+    scanBarcode: "Scanner le code-barres",
+    swipeLeftToDelete: "Glissez vers la gauche pour supprimer",
+    dragHereToDelete: "Glissez ici pour supprimer"
   ,more: "Plus"
   ,barcodeInvalidChecksum: "Code-barres invalide ({code})"
   ,barcodeNotFound: "Code {code} introuvable"
@@ -348,7 +352,9 @@ export default {
     enterDiscountAmount: "أدخل مبلغ الخصم",
     itemNote: "ملاحظة العنصر",
     addNotePlaceholder: "أضف ملاحظة...",
-    scanBarcode: "مسح الباركود"
+    scanBarcode: "مسح الباركود",
+    swipeLeftToDelete: "اسحب يساراً للحذف",
+    dragHereToDelete: "اسحب إلى هنا للحذف"
   ,more: "المزيد"
   ,barcodeInvalidChecksum: "رمز باركود غير صالح ({code})"
   ,barcodeNotFound: "الرمز {code} غير موجود"

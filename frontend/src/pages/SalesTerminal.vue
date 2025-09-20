@@ -5,9 +5,26 @@
   <div class="col-12 col-md-7 col-xl-8 products-pane">
         <div class="row items-center no-wrap q-gutter-sm">
           <div class="col">
-            <q-tabs v-model="selectedCategory" class="text-primary" align="left" dense shrink>
+            <q-tabs v-model="selectedCategory" class="text-primary" :class="{ 'is-dragging': isDragging }" align="left" dense shrink>
               <q-tab :name="MOST_USED" :label="$t('pos.mostUsed')" />
-              <q-tab v-for="cat in visibleCategories" :key="cat" :name="cat" :label="cat" />
+              <q-tab 
+                v-for="cat in visibleCategories" 
+                :key="cat" 
+                :name="cat" 
+                :label="cat" 
+                :class="{
+                  'drag-over': dragOverCategory === cat,
+                  'dragging': draggedCategory === cat,
+                  'drop-cursor-left': dropCursorPosition?.category === cat && dropCursorPosition?.side === 'left',
+                  'drop-cursor-right': dropCursorPosition?.category === cat && dropCursorPosition?.side === 'right'
+                }"
+                draggable="true"
+                @dragstart="onCategoryDragStart(cat, $event)"
+                @dragend="onCategoryDragEnd"
+                @dragover="onCategoryDragOver(cat, $event)"
+                @dragleave="onCategoryDragLeave"
+                @drop="onCategoryDrop(cat, $event)"
+              />
             </q-tabs>
             <!-- Search popup anchored to tabs container -->
             <q-menu
@@ -26,7 +43,7 @@
                   v-model="categorySearch"
                   outlined
                   clearable
-                  debounce="200"
+                  debounce="300"
                   :placeholder="$t('pos.searchCategoriesOrProducts')"
                   class="search-glow"
                   autofocus
@@ -100,7 +117,7 @@
           color="primary"
           unelevated
           icon="receipt_long"
-          :label="$t('receipt') + (groupedReceipt.length ? ' (' + groupedReceipt.length + ')' : '')"
+          :label="$t('receipt') + (totalItemsCount ? ' (' + totalItemsCount + ')' : '')"
           class="mobile-receipt-bar"
           @click="openReceiptDialog"
         />
@@ -117,6 +134,11 @@
             </div>
           </q-card-section>
           <q-separator />
+          <!-- Mobile Delete Hint -->
+          <div v-if="isTouchDevice && orderedLines.length > 0" class="mobile-hint q-pa-sm bg-blue-1 text-blue-8 text-center text-caption">
+            <q-icon name="swipe" size="xs" class="q-mr-xs" />
+            {{ t('pos.swipeLeftToDelete') }}
+          </div>
           <div class="relative-position receipt-body">
             <q-list ref="receiptListRef" class="receipt-list">
               <q-item v-for="item in orderedLines" :key="item.id" :data-line-id="item.id"
@@ -125,8 +147,17 @@
                 @dragend="onDragEnd"
                 @dragenter="onReorderDragEnter(item.id)"
                 @dragover.prevent
-                @drop.stop.prevent="onReorderDrop(item.id)"
-                :class="{ 'dragging': draggingId === item.id, 'receipt-added': lastAddedId === item.id, 'reorder-over': reorderOverId === item.id, 'reorder-dragging': reorderDragId === item.id }"
+                @drop.prevent="onItemDrop(item.id, $event)"
+                @touchstart="onTouchStart(item.id, $event)"
+                @touchmove="onTouchMove($event)"
+                @touchend="onTouchEnd"
+                :class="{ 
+                  'dragging': draggingId === item.id || (touchDragState.isDragging && touchDragState.itemId === item.id), 
+                  'receipt-added': lastAddedId === item.id, 
+                  'reorder-over': reorderOverId === item.id, 
+                  'reorder-dragging': reorderDragId === item.id,
+                  'touch-dragging': touchDragState.isDragging && touchDragState.itemId === item.id
+                }"
               >
                 <q-item-section avatar>
                   <q-fab
@@ -388,7 +419,7 @@
         </q-card>
       </div>
     </div>
-  <!-- Mobile Receipt Dialog (bottom sheet) -->
+  <!-- Mobile Receipt Dialog (bottom sheet) - FIRST -->
   <q-dialog v-model="receiptDialog" position="bottom" transition-show="slide-up" transition-hide="slide-down">
     <q-card style="width: 100vw; max-width: 100vw; max-height: 85vh;" class="q-pa-none">
         <q-card-section class="bg-grey-2">
@@ -402,10 +433,22 @@
         </q-card-section>
         <q-separator />
         <div class="relative-position" style="overflow-y: auto; max-height: calc(85vh - 160px);">
+          <!-- Mobile Delete Hint -->
+          <div v-if="orderedLines.length > 0" class="mobile-hint q-pa-sm bg-blue-1 text-blue-8 text-center text-caption">
+            <q-icon name="swipe" size="xs" class="q-mr-xs" />
+            {{ t('pos.swipeLeftToDelete') }}
+          </div>
           <q-list class="receipt-list q-px-sm q-pt-sm">
             <q-item v-for="item in orderedLines" :key="item.id" :data-line-id="item.id"
               @dragenter="onReorderDragEnter(item.id)" @dragover.prevent @drop.stop.prevent="onReorderDrop(item.id)"
-              :class="{ 'reorder-over': reorderOverId === item.id, 'reorder-dragging': reorderDragId === item.id }"
+              @touchstart="onTouchStart(item.id, $event)"
+              @touchmove="onTouchMove($event)"
+              @touchend="onTouchEnd"
+              :class="{ 
+                'reorder-over': reorderOverId === item.id, 
+                'reorder-dragging': reorderDragId === item.id,
+                'touch-dragging': touchDragState.isDragging && touchDragState.itemId === item.id
+              }"
             >
               <q-item-section avatar>
                 <q-fab
@@ -552,7 +595,7 @@
       </q-card-actions>
     </q-card>
   </q-dialog>
-  <!-- Mobile Receipt Dialog (bottom sheet) -->
+  <!-- Mobile Receipt Dialog (bottom sheet) - SECOND -->
   <q-dialog v-model="receiptDialog" position="bottom" transition-show="slide-up" transition-hide="slide-down">
     <q-card style="width: 100vw; max-width: 100vw; max-height: 85vh;" class="q-pa-none">
         <q-card-section class="bg-grey-2">
@@ -566,10 +609,22 @@
         </q-card-section>
         <q-separator />
         <div class="relative-position" style="overflow-y: auto; max-height: calc(85vh - 160px);">
+          <!-- Mobile Delete Hint -->
+          <div v-if="orderedLines.length > 0" class="mobile-hint q-pa-sm bg-blue-1 text-blue-8 text-center text-caption">
+            <q-icon name="swipe" size="xs" class="q-mr-xs" />
+            {{ t('pos.swipeLeftToDelete') }}
+          </div>
           <q-list class="receipt-list q-px-sm q-pt-sm">
             <q-item v-for="item in orderedLines" :key="item.id" :data-line-id="item.id"
+              @touchstart="onTouchStart(item.id, $event)"
+              @touchmove="onTouchMove($event)"
+              @touchend="onTouchEnd"
               @dragenter="onReorderDragEnter(item.id)" @dragover.prevent @drop.stop.prevent="onReorderDrop(item.id)"
-              :class="{ 'reorder-over': reorderOverId === item.id, 'reorder-dragging': reorderDragId === item.id }"
+              :class="{ 
+                'reorder-over': reorderOverId === item.id, 
+                'reorder-dragging': reorderDragId === item.id,
+                'touch-dragging': touchDragState.isDragging && touchDragState.itemId === item.id
+              }"
             >
               <q-item-section avatar>
                 <q-fab
@@ -745,26 +800,27 @@
       </q-card-actions>
     </q-card>
   </q-dialog>
-  </q-page>
-  <!-- Global Teleported Trash Overlay to escape receipt pane stacking context -->
-  <teleport to="body">
-    <div v-show="draggingId !== null" class="trash-overlay">
-      <div
+
+  <!-- Desktop Drag-to-Delete Trash Overlay -->
+  <Teleport to="body" v-if="showTrashOverlay">
+    <div class="trash-overlay">
+      <div 
         class="trash-drop-zone"
-        :class="{ 'trash-active': draggingId !== null }"
+        :class="{ 'trash-active': draggingId !== null, 'trash-over': overTrash }"
+        @dragenter.prevent="onTrashDragEnter"
         @dragover.prevent
-        @drop="onDropTrash"
-        :style="draggingId !== null ? 'pointer-events:auto;' : 'pointer-events:none;'"
+        @dragleave="onTrashDragLeave"
+        @drop.prevent="onDropTrash"
       >
-        <q-icon
-          name="delete"
-          :color="draggingId !== null ? 'negative' : 'grey-6'"
-          size="64px"
-          :class="draggingId !== null ? 'q-animate-bounce' : ''"
-        />
+        <q-icon name="delete" size="32px" color="negative" />
+        <div class="trash-instruction">
+          <div class="text-negative text-weight-bold">{{ $t('pos.dragHereToDelete') }}</div>
+        </div>
       </div>
     </div>
-  </teleport>
+  </Teleport>
+
+  </q-page>
 </template>
 
 <script setup lang="ts">
@@ -778,25 +834,385 @@ import CameraScanner from '../components/CameraScanner.vue';
 const $q = useQuasar();
 const { t } = useI18n();
 
+// Reactive viewport width for physical monitor size-aware computations
+const viewportWidth = ref(typeof window !== 'undefined' ? window.innerWidth : 1200);
+
+// Debounced resize handler for better INP performance
+let resizeTimeout: number | null = null;
+function handleViewportResize() { 
+  if (resizeTimeout) clearTimeout(resizeTimeout);
+  resizeTimeout = window.setTimeout(() => {
+    viewportWidth.value = window.innerWidth;
+    resizeTimeout = null;
+  }, 150); // Debounce resize events
+}
+
+if (typeof window !== 'undefined') {
+  window.addEventListener('resize', handleViewportResize, { passive: true });
+  onBeforeUnmount(() => {
+    window.removeEventListener('resize', handleViewportResize);
+    if (resizeTimeout) clearTimeout(resizeTimeout);
+  });
+}
+
 // Drag delete state
 const draggingId = ref<number|null>(null);
 function onDragStart(id: number) { draggingId.value = id; }
-function onDragEnd() { draggingId.value = null; }
+function onDragEnd() { 
+  draggingId.value = null; 
+  overTrash.value = false; 
+}
+
+// Desktop drag-to-delete trash overlay state
+const overTrash = ref(false);
+const showTrashOverlay = computed(() => draggingId.value !== null);
+
+// Desktop trash zone drag handlers
+function onTrashDragEnter(event: DragEvent) {
+  event.preventDefault();
+  overTrash.value = true;
+}
+
+function onTrashDragLeave() {
+  overTrash.value = false;
+}
+
+function onDropTrash(event: DragEvent) {
+  event.preventDefault();
+  const draggedItemId = draggingId.value;
+  
+  // Reset drag state
+  overTrash.value = false;
+  draggingId.value = null;
+  
+  // Delete the item if there was one being dragged
+  if (draggedItemId !== null) {
+    deleteLine(draggedItemId);
+  }
+}
+
+// Touch-based drag state for mobile devices
+const touchDragState = ref<{
+  itemId: number | null;
+  startX: number;
+  startY: number;
+  currentX: number;
+  currentY: number;
+  isDragging: boolean;
+  swipeProgress: number;
+}>({
+  itemId: null,
+  startX: 0,
+  startY: 0,
+  currentX: 0,
+  currentY: 0,
+  isDragging: false,
+  swipeProgress: 0
+});
+
+// Touch event handlers for mobile drag-to-delete
+function onTouchStart(id: number, event: TouchEvent) {
+  
+  if (event.touches.length === 0) {
+    return;
+  }
+  
+  const firstTouch = event.touches.item(0);
+  if (!firstTouch) {
+    return;
+  }
+  
+  // Prepare item for smooth color transitions
+  const itemElement = document.querySelector<HTMLElement>(`.q-item[data-line-id="${id}"]`);
+  
+  if (itemElement) {
+    // Add a simple blue border to show touch started
+    itemElement.style.border = '2px solid blue';
+  } else {
+    // Element not found - could try alternative selectors if needed
+  }
+  
+  touchDragState.value = {
+    itemId: id,
+    startX: firstTouch.clientX,
+    startY: firstTouch.clientY,
+    currentX: firstTouch.clientX,
+    currentY: firstTouch.clientY,
+    isDragging: false,
+    swipeProgress: 0
+  };
+  
+  // Remove long-press timer - no longer needed
+  // longPressTimer = window.setTimeout(() => {
+  //   console.log('⏰ Long press timer triggered for item', id);
+  //   if (touchDragState.value.itemId === id && !touchDragState.value.isDragging) {
+  //     // Long press detected - show delete confirmation
+  //     if (confirm('Delete this item from receipt?')) {
+  //       console.log('🗑️ Deleting item via long press:', id);
+  //       deleteLine(id);
+  //     }
+  //   }
+  // }, 800); // 800ms long press
+}
+
+function onTouchMove(event: TouchEvent) {
+  
+  if (!touchDragState.value.itemId || event.touches.length === 0) {
+    return;
+  }
+  
+  const firstTouch = event.touches.item(0);
+  if (!firstTouch) {
+    return;
+  }
+  
+  // Long press timer handling removed
+  
+  const deltaX = firstTouch.clientX - touchDragState.value.startX;
+  const deltaY = Math.abs(firstTouch.clientY - touchDragState.value.startY);
+  const absDeltaX = Math.abs(deltaX);
+  
+  // Check for horizontal swipe (left to delete)
+  if (absDeltaX > 50 && deltaY < 30) {
+    event.preventDefault(); // Prevent scrolling
+    
+    if (!touchDragState.value.isDragging) {
+      touchDragState.value.isDragging = true;
+    }
+    
+    // Calculate swipe progress and apply color phases
+    const swipeProgress = Math.min(Math.abs(deltaX) / 120, 1);
+    touchDragState.value.swipeProgress = swipeProgress;
+    
+    // Apply color classes based on swipe distance for orange-to-red progression
+    const itemElement = document.querySelector<HTMLElement>(`.q-item[data-line-id="${touchDragState.value.itemId}"]`);
+    
+    if (itemElement && deltaX < 0) { // Only for left swipes
+      
+      // Reset any previous styles first
+      itemElement.style.backgroundColor = '';
+      itemElement.style.border = '';
+      itemElement.style.boxShadow = '';
+      itemElement.style.transform = '';
+      
+      if (Math.abs(deltaX) >= 40 && Math.abs(deltaX) < 60) {
+        // Orange phase: 40-60px - VERY STRONG ORANGE
+        itemElement.style.backgroundColor = 'orange !important';
+        itemElement.style.border = '5px solid #ff6600';
+        itemElement.style.boxShadow = '0 0 20px orange';
+      } else if (Math.abs(deltaX) >= 60 && Math.abs(deltaX) < 80) {
+        // Red phase: 60-80px - VERY STRONG RED
+        itemElement.style.backgroundColor = 'red !important';
+        itemElement.style.border = '5px solid #cc0000';
+        itemElement.style.boxShadow = '0 0 20px red';
+      } else if (Math.abs(deltaX) >= 80) {
+        // Delete ready: 80px+ - VERY STRONG DARK RED
+        itemElement.style.backgroundColor = 'darkred !important';
+        itemElement.style.border = '5px solid #990000';
+        itemElement.style.boxShadow = '0 0 20px darkred';
+        itemElement.style.transform = 'translateX(-10px)';
+      }
+    }
+    
+    touchDragState.value.currentX = firstTouch.clientX;
+    touchDragState.value.currentY = firstTouch.clientY;
+  }
+}
+
+function onTouchEnd() {
+  
+  if (!touchDragState.value.itemId) {
+    return;
+  }
+  
+  // Long press timer handling removed
+  
+  const itemId = touchDragState.value.itemId;
+  const wasDragging = touchDragState.value.isDragging;
+  const swipeDistance = touchDragState.value.currentX - touchDragState.value.startX;
+  
+  // Clean up color classes from the item
+  const itemElement = document.querySelector<HTMLElement>(`.q-item[data-line-id="${itemId}"]`);
+  if (itemElement) {
+    // Only clean up inline styles - no CSS classes needed
+    itemElement.style.backgroundColor = '';
+    itemElement.style.border = '';
+    itemElement.style.boxShadow = '';
+    itemElement.style.transform = '';
+  }
+  
+  // Reset touch state
+  touchDragState.value = {
+    itemId: null,
+    startX: 0,
+    startY: 0,
+    currentX: 0,
+    currentY: 0,
+    isDragging: false,
+    swipeProgress: 0
+  };
+  draggingId.value = null;
+  
+  // Delete item if swiped left far enough (more than 80px)
+  if (wasDragging && swipeDistance < -80) {
+    
+    // Add final deletion animation before removing
+    if (itemElement) {
+      itemElement.style.transition = 'transform 0.3s ease, opacity 0.3s ease';
+      itemElement.style.transform = 'translateX(-100%)';
+      itemElement.style.opacity = '0';
+      
+      // Delete after animation
+      setTimeout(() => {
+        deleteLine(itemId);
+      }, 300);
+    } else {
+      deleteLine(itemId);
+    }
+  }
+}
 
 // import { useRouter } from 'vue-router';
 
 // Special pseudo-category for Most Used products (local usage stats for now; can be replaced with server stats later)
 const MOST_USED = '__MOST_USED__' as const;
-const categories = [
+
+// Default categories order
+const DEFAULT_CATEGORIES = [
   'Stationery', 'Books', 'Office', 'Gadgets', 'Supplies',
   'Arts', 'Crafts', 'Paper', 'Ink', 'Hardware',
   'Software', 'Snacks', 'Beverages', 'Cleaning', 'Storage'
 ] as const;
-type Category = typeof categories[number] | typeof MOST_USED;
-const selectedCategory = ref<Category>(categories[0]);
+
+// Load categories order from localStorage or use default
+const loadCategoriesOrder = (): readonly string[] => {
+  try {
+    const stored = localStorage.getItem('sijil-pos-categories-order');
+    if (stored) {
+      const parsed = JSON.parse(stored);
+      if (Array.isArray(parsed) && parsed.length === DEFAULT_CATEGORIES.length) {
+        // Validate that all default categories are present
+        const hasAllCategories = DEFAULT_CATEGORIES.every(cat => parsed.includes(cat));
+        if (hasAllCategories) return parsed;
+      }
+    }
+  } catch (e) {
+    console.warn('Failed to load categories order:', e);
+  }
+  return DEFAULT_CATEGORIES;
+};
+
+// Save categories order to localStorage
+const saveCategoriesOrder = (order: readonly string[]) => {
+  try {
+    localStorage.setItem('sijil-pos-categories-order', JSON.stringify(order));
+  } catch (e) {
+    console.warn('Failed to save categories order:', e);
+  }
+};
+
+// Reactive categories that can be reordered
+const categories = ref<readonly string[]>(loadCategoriesOrder());
+type Category = string; // Any category name including MOST_USED
+const selectedCategory = ref<Category>(categories.value[0] ?? 'Stationery');
 const categorySearch = ref<string>('');
 const searchInputRef = ref<ComponentPublicInstance | null>(null);
 // No explicit state needed for popup proxy
+
+// Drag and drop state for category reordering
+const draggedCategory = ref<string | null>(null);
+const dragOverCategory = ref<string | null>(null);
+const isDragging = ref(false);
+const dropCursorPosition = ref<{ category: string; side: 'left' | 'right' } | null>(null);
+
+// Drag and drop handlers
+function onCategoryDragStart(category: string, event: DragEvent) {
+  if (!event.dataTransfer) return;
+  draggedCategory.value = category;
+  isDragging.value = true;
+  event.dataTransfer.effectAllowed = 'move';
+  event.dataTransfer.setData('text/plain', category);
+  
+  // Add drag styling
+  if (event.target instanceof HTMLElement) {
+    event.target.classList.add('dragging');
+  }
+}
+
+function onCategoryDragEnd(event: DragEvent) {
+  draggedCategory.value = null;
+  dragOverCategory.value = null;
+  isDragging.value = false;
+  dropCursorPosition.value = null;
+  
+  // Remove drag styling
+  if (event.target instanceof HTMLElement) {
+    event.target.classList.remove('dragging');
+  }
+}
+
+function onCategoryDragOver(category: string, event: DragEvent) {
+  if (draggedCategory.value && draggedCategory.value !== category) {
+    event.preventDefault();
+    dragOverCategory.value = category;
+    
+    // Calculate drop cursor position based on mouse position relative to tab
+    const tabElement = event.currentTarget as HTMLElement;
+    const rect = tabElement.getBoundingClientRect();
+    const mouseX = event.clientX;
+    const tabCenterX = rect.left + rect.width / 2;
+    
+    // Show cursor on left or right side based on mouse position
+    const side = mouseX < tabCenterX ? 'left' : 'right';
+    dropCursorPosition.value = { category, side };
+    
+    if (event.dataTransfer) {
+      event.dataTransfer.dropEffect = 'move';
+    }
+  }
+}
+
+function onCategoryDragLeave() {
+  dragOverCategory.value = null;
+  dropCursorPosition.value = null;
+}
+
+function onCategoryDrop(targetCategory: string, event: DragEvent) {
+  event.preventDefault();
+  
+  const sourceCategory = draggedCategory.value;
+  if (!sourceCategory || sourceCategory === targetCategory) return;
+  
+  const currentOrder = [...categories.value];
+  const sourceIndex = currentOrder.indexOf(sourceCategory);
+  const targetIndex = currentOrder.indexOf(targetCategory);
+  
+  if (sourceIndex === -1 || targetIndex === -1) return;
+  
+  // Use drop cursor position for more precise insertion
+  const insertPosition = dropCursorPosition.value;
+  let newTargetIndex = targetIndex;
+  
+  if (insertPosition?.side === 'right') {
+    // Insert after the target
+    newTargetIndex = sourceIndex < targetIndex ? targetIndex : targetIndex + 1;
+  } else {
+    // Insert before the target  
+    newTargetIndex = sourceIndex < targetIndex ? targetIndex - 1 : targetIndex;
+  }
+  
+  // Remove source and insert at calculated position
+  currentOrder.splice(sourceIndex, 1);
+  currentOrder.splice(newTargetIndex, 0, sourceCategory);
+  
+  // Update categories and save to localStorage
+  categories.value = currentOrder;
+  saveCategoriesOrder(currentOrder);
+  
+  // Clear drag state
+  dragOverCategory.value = null;
+  dropCursorPosition.value = null;
+}
 const searchOpen = ref(false);
 type Article = {
   id: number;
@@ -822,7 +1238,7 @@ const baseArticles: Article[] = [
 const extraArticles: Article[] = Array.from({ length: 120 }, (_v, idx) => {
   const id = baseArticles.length + idx + 1; // start at 8
   const imgNum = ((id - 1) % 35) + 1; // 1..35 loop
-  const cat = categories[id % categories.length] ?? 'Stationery';
+  const cat = categories.value[id % categories.value.length] ?? 'Stationery';
   const price = +( (1 + ((id % 30) * 0.5)).toFixed(2) ); // 1.00 .. 16.00 range
   return {
     id,
@@ -872,30 +1288,37 @@ const filteredArticles = computed(() => {
 
 // Category filtering for tabs/dropdown (define before watchers using it)
 const filteredCategories = computed<Category[]>(() => {
-  const base = Array.from(categories) as Category[];
+  const base = Array.from(categories.value);
   const q = categorySearch.value.trim().toLowerCase();
-  let list: Category[];
+  let list: string[];
   if (!q) list = base; else {
     const nameMatches = new Set(base.filter(c => c.toLowerCase().includes(q)));
     const productMatches = new Set(
       articles.value
         .filter((a: Article) => a.name.toLowerCase().includes(q) || a.category.toLowerCase().includes(q))
-        .map(a => a.category as Category)
+        .map(a => a.category)
     );
-    const merged = new Set<Category>([...Array.from(nameMatches), ...Array.from(productMatches)]);
+    const merged = new Set([...Array.from(nameMatches), ...Array.from(productMatches)]);
     list = base.filter(c => merged.has(c));
   }
   // Always put MOST_USED at the start
   return [MOST_USED, ...list];
 });
 
-// Show a limited number of category tabs based on breakpoint
+// Show a limited number of category tabs based on viewport width (optimized for large monitors)
 // Note: These numbers are for regular categories only, "Most Used" tab is always shown additionally
 const maxTabs = computed(() => {
-  if ($q.screen.lt.sm) return 1;   // Small screens: 1 + Most Used = 2 total tabs
-  if ($q.screen.lt.md) return 2;   // Medium screens: 2 + Most Used = 3 total tabs
-  if ($q.screen.lt.lg) return 4;   // Large screens: 4 + Most Used = 5 total tabs
-  return 5;                        // Extra large screens: 5 + Most Used = 6 total tabs
+  const width = viewportWidth.value;
+  
+  // Use raw viewport width - works better for large desktop monitors
+  if (width < 640) return 1;       // Mobile/small tablets: 1 + Most Used = 2 total tabs
+  if (width < 768) return 2;       // Large phones/small tablets: 2 + Most Used = 3 total tabs  
+  if (width < 1024) return 3;      // Tablets/small laptops: 3 + Most Used = 4 total tabs
+  if (width < 1280) return 4;      // Standard laptops: 4 + Most Used = 5 total tabs
+  if (width < 1440) return 5;      // Large laptops/small desktops: 5 + Most Used = 6 total tabs
+  if (width < 1920) return 6;      // Full HD desktops: 6 + Most Used = 7 total tabs
+  if (width < 2560) return 7;      // 24" monitors/QHD: 7 + Most Used = 8 total tabs
+  return 8;                        // 27"+ monitors/4K: 8 + Most Used = 9 total tabs
 });
 // filteredCategories already includes MOST_USED at index 0, but we don't want it duplicated in overflow logic.
 const visibleCategories = computed(() => filteredCategories.value.filter(c => c !== MOST_USED).slice(0, maxTabs.value));
@@ -1017,8 +1440,16 @@ const isTouchDevice = ref<boolean>(false);
 const prefersReducedMotion = ref<boolean>(false);
 onMounted(() => {
   try {
-    isTouchDevice.value = matchMedia('(pointer: coarse)').matches || 'ontouchstart' in window || navigator.maxTouchPoints > 0;
-  } catch { isTouchDevice.value = false; }
+    const hasCoarsePointer = matchMedia('(pointer: coarse)').matches;
+    const hasTouchStart = 'ontouchstart' in window;
+    const hasMaxTouchPoints = navigator.maxTouchPoints > 0;
+    const isMobileUserAgent = /Android|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent);
+    
+    isTouchDevice.value = hasCoarsePointer || hasTouchStart || hasMaxTouchPoints || isMobileUserAgent;
+  } catch (e) { 
+    void e; // ignore
+    isTouchDevice.value = false; 
+  }
   try {
     prefersReducedMotion.value = matchMedia('(prefers-reduced-motion: reduce)').matches;
   } catch { prefersReducedMotion.value = false; }
@@ -1028,7 +1459,13 @@ function handleAdd(article: Article, ev: MouseEvent) {
   if (isTouchDevice.value || prefersReducedMotion.value) {
     addToReceipt(article);
     lastAddedId.value = article.id;
-    playAddBeep();
+    
+    // Defer non-critical operations to improve INP
+    if ('requestIdleCallback' in window) {
+      requestIdleCallback(() => playAddBeep(), { timeout: 50 });
+    } else {
+      setTimeout(() => playAddBeep(), 0);
+    }
     return;
   }
   const card = (ev.currentTarget as HTMLElement) || null;
@@ -1064,7 +1501,10 @@ function handleAdd(article: Article, ev: MouseEvent) {
       zIndex: '99999',
       pointerEvents: 'none',
       transform: 'translate(0,0) scale(1)',
-      transition: 'transform .65s cubic-bezier(.55,.06,.27,.99), opacity .65s ease'
+      transition: 'transform .65s cubic-bezier(.55,.06,.27,.99), opacity .65s ease',
+      willChange: 'transform, opacity',
+      backfaceVisibility: 'hidden',
+      contain: 'layout style paint'
     });
     document.body.appendChild(fly);
     // Force reflow
@@ -1079,7 +1519,10 @@ function handleAdd(article: Article, ev: MouseEvent) {
   // Keep some opacity so the flying object remains visible
   fly.style.opacity = '0.45';
     });
-    const cleanup = () => fly.remove();
+    const cleanup = () => {
+      fly.style.willChange = 'auto'; // Clean up will-change
+      fly.remove();
+    };
     fly.addEventListener('transitionend', cleanup, { once: true });
     setTimeout(cleanup, 900);
     setTimeout(() => { if (lastAddedId.value === article.id) lastAddedId.value = null; }, 1000);
@@ -1107,21 +1550,33 @@ function setLineQuantity(id: number, newQty: number) {
 }
 const openFabId = ref<number|null>(null);
 function toggleFab(id: number, open: boolean) { openFabId.value = open ? id : (openFabId.value === id ? null : openFabId.value); }
+
+// Debounced beep to prevent audio overlap during rapid clicks
+let beepTimeout: number | null = null;
+function playDebouncedBeep() {
+  if (beepTimeout) clearTimeout(beepTimeout);
+  beepTimeout = window.setTimeout(() => {
+    void playAddBeep();
+    beepTimeout = null;
+  }, 50);
+}
+
 function increment(id: number) {
   if (qtyOverrides.value[id] !== undefined) {
     qtyOverrides.value = { ...qtyOverrides.value, [id]: (qtyOverrides.value[id] || 0) + 1 };
   } else {
     const article = articles.value.find(a => a.id === id); if (article) receipt.value.push(article);
   }
+  playDebouncedBeep();
   void nextTick(() => { openFabId.value = id; });
 }
 function decrement(id: number) {
   if (qtyOverrides.value[id] !== undefined) {
     const next = Math.max(0, (qtyOverrides.value[id] || 0) - 1);
-    if (next <= 0) { deleteLine(id); } else { qtyOverrides.value = { ...qtyOverrides.value, [id]: next }; void nextTick(() => { openFabId.value = id; }); }
+    if (next <= 0) { deleteLine(id); } else { qtyOverrides.value = { ...qtyOverrides.value, [id]: next }; playDebouncedBeep(); void nextTick(() => { openFabId.value = id; }); }
   } else {
     const index = receipt.value.findIndex(a => a.id === id); if (index !== -1) receipt.value.splice(index, 1);
-    const stillExists = receipt.value.some(a => a.id === id); void nextTick(() => { openFabId.value = stillExists ? id : null; });
+    const stillExists = receipt.value.some(a => a.id === id); if (stillExists) playDebouncedBeep(); void nextTick(() => { openFabId.value = stillExists ? id : null; });
   }
 }
 function deleteLine(id: number) {
@@ -1131,7 +1586,7 @@ function deleteLine(id: number) {
   if (notesById.value[id] !== undefined) { const restN = { ...notesById.value }; delete restN[id]; notesById.value = restN; }
   if (openFabId.value === id) openFabId.value = null;
 }
-function onDropTrash() { if (draggingId.value !== null) { deleteLine(draggingId.value); draggingId.value = null; } }
+
 type Reduction = { kind: 'percent' | 'amount'; value: number };
 const reductionsById = ref<Record<number, number | Reduction>>({});
 
@@ -1253,6 +1708,7 @@ function onReorderDragEnter(id: number) {
   if (reorderDragId.value != null && reorderDragId.value !== id) reorderOverId.value = id;
 }
 function onReorderDrop(targetId: number) {
+  // Only handle reorder drops, not whole-item drags (which are for deletion)
   if (reorderDragId.value != null && reorderDragId.value !== targetId) {
     const from = lineOrder.value.indexOf(reorderDragId.value);
     const to = lineOrder.value.indexOf(targetId);
@@ -1267,6 +1723,17 @@ function onReorderDrop(targetId: number) {
   }
   reorderDragId.value = null;
   reorderOverId.value = null;
+}
+
+// Handle drops on receipt items - distinguish between reordering vs deletion
+function onItemDrop(targetId: number, event: DragEvent) {
+  // If this is a reorder drag (from the handle), handle it and stop propagation
+  if (reorderDragId.value !== null) {
+    event.stopPropagation();
+    onReorderDrop(targetId);
+  }
+  // If this is a whole-item drag (draggingId set), let it bubble to trash zone
+  // Don't stop propagation in this case
 }
 
 // Reset filters on Escape key
@@ -1321,6 +1788,7 @@ function reductionLabel(id: number) {
 }
 
 const subtotal = computed(() => groupedReceipt.value.reduce((sum, item) => sum + lineTotal(item), 0));
+const totalItemsCount = computed(() => groupedReceipt.value.reduce((sum, item) => sum + item.qty, 0));
 // Total-level reduction (percent or amount)
 const totalReduction = ref<number | Reduction | null>(null);
 const hasTotalReduction = computed(() => {
@@ -1485,6 +1953,21 @@ function openHoldFromMobile() { openHoldList(); }
 </script>
 
 <style scoped>
+/* Disable text selection for better touch/POS experience */
+* {
+  user-select: none;
+  -webkit-user-select: none;
+  -moz-user-select: none;
+  -ms-user-select: none;
+}
+/* Allow text selection in input fields and editable areas */
+:deep(input), :deep(textarea), :deep([contenteditable="true"]) {
+  user-select: text;
+  -webkit-user-select: text;
+  -moz-user-select: text;
+  -ms-user-select: text;
+}
+
 /* Full-width mobile receipt bar (fixed above footer) */
 .mobile-receipt-bar {
   position: fixed;
@@ -1543,12 +2026,16 @@ function openHoldFromMobile() { openHoldList(); }
   background: #fff;
   border: 4px solid var(--q-grey-4);
   display: flex;
+  flex-direction: column;
   align-items: center;
   justify-content: center;
   box-shadow: 0 8px 24px rgba(0,0,0,0.18);
   transition: border-color .25s, box-shadow .25s, transform .25s, background .25s, opacity .25s;
-  opacity: 0.2;
-  overflow: visible;
+  opacity: 0.8; /* Slightly more visible when first appears */
+  overflow: hidden; /* Prevent content from going outside circle */
+  padding: 8px; /* Small padding to keep content within bounds */
+  pointer-events: all; /* Allow the drop zone to receive drag events */
+  animation: trashAppear 0.3s ease-out; /* Smooth appearance animation */
 }
 .trash-drop-zone::before,
 .trash-drop-zone::after {
@@ -1564,12 +2051,56 @@ function openHoldFromMobile() { openHoldList(); }
   position: fixed;
   inset: 0;
   display: flex;
+  flex-direction: column;
   align-items: center;
   justify-content: center;
   z-index: 10050;
   pointer-events: none;
 }
-.trash-drop-zone.trash-active { border-color: var(--q-negative); opacity: 1; transform: scale(1); animation: trashScale 0.35s ease-out; }
+
+.trash-drop-zone.trash-over {
+  background-color: rgba(244, 67, 54, 0.15);
+  transform: scale(1.15);
+  border-color: var(--q-negative);
+  box-shadow: 0 8px 32px rgba(0,0,0,0.25), 0 0 0 6px rgba(244,67,54,0.3), 0 0 50px rgba(244,67,54,0.6);
+  animation: trashGlow 0.8s ease-in-out infinite alternate;
+}
+
+.trash-instruction {
+  user-select: none;
+  pointer-events: none;
+  text-align: center;
+  font-size: 10px; /* Smaller text to fit in circle */
+  line-height: 1.1;
+  max-width: 100px; /* Constrain width to prevent overflow */
+  margin-top: 4px; /* Small spacing from icon */
+}
+
+/* Mobile touch dragging styles */
+.touch-dragging {
+  opacity: 0.7;
+  transform: scale(0.95);
+  z-index: 1000;
+}
+
+/* Improve touch targets for receipt items on mobile */
+@media (max-width: 599px) {
+  .receipt-list .q-item {
+    min-height: 60px;
+    touch-action: pan-y; /* Allow vertical scrolling but enable custom touch handling */
+  }
+  
+  .trash-overlay {
+    background: rgba(0, 0, 0, 0.3); /* Darker overlay on mobile for better visibility */
+  }
+}
+.trash-drop-zone.trash-active { 
+  border-color: var(--q-negative); 
+  opacity: 1; 
+  transform: scale(1); 
+  animation: trashScale 0.35s ease-out;
+  box-shadow: 0 8px 24px rgba(0,0,0,0.18), 0 0 0 4px rgba(244,67,54,0.2), 0 0 30px rgba(244,67,54,0.4);
+}
 .trash-drop-zone.trash-active::before {
   animation: trashPulseRing 1.4s ease-out infinite;
 }
@@ -1580,10 +2111,28 @@ function openHoldFromMobile() { openHoldList(); }
     0% { transform: scale(.6); }
     100% { transform: scale(1); }
   }
+@keyframes trashAppear {
+  0% { 
+    opacity: 0; 
+    transform: scale(.5); 
+  }
+  100% { 
+    opacity: 0.8; 
+    transform: scale(.85); 
+  }
+}
 @keyframes trashPulseRing {
   0% { box-shadow: 0 0 0 0 rgba(244,67,54,0.55); opacity: .9; }
   70% { box-shadow: 0 0 0 28px rgba(244,67,54,0); opacity: 0; }
   100% { box-shadow: 0 0 0 0 rgba(244,67,54,0); opacity: 0; }
+}
+@keyframes trashGlow {
+  0% { 
+    box-shadow: 0 8px 32px rgba(0,0,0,0.25), 0 0 0 6px rgba(244,67,54,0.3), 0 0 50px rgba(244,67,54,0.6);
+  }
+  100% { 
+    box-shadow: 0 8px 32px rgba(0,0,0,0.25), 0 0 0 8px rgba(244,67,54,0.5), 0 0 60px rgba(244,67,54,0.8);
+  }
 }
   /* Reorder styles */
   .reorder-handle { cursor: grab; opacity: .6; transition: opacity .2s; }
@@ -1758,9 +2307,130 @@ function openHoldFromMobile() { openHoldList(); }
   .nkey { min-height: 36px; }
 }
 
-/* Improve touch responsiveness */
+/* Improve touch responsiveness and INP performance */
 :deep(.q-btn), :deep(.q-tab), :deep(.q-fab), :deep(.q-item), .product-card {
   touch-action: manipulation;
+  contain: layout style;
+  will-change: transform;
+}
+
+/* Performance optimizations for heavy interaction elements */
+.products-scroll {
+  contain: layout style paint;
+  will-change: scroll-position;
+  transform: translateZ(0); /* Create composite layer for smooth scrolling */
+}
+
+.receipt-list {
+  contain: layout style;
+}
+
+.product-card {
+  backface-visibility: hidden;
+  transform: translateZ(0);
+}
+
+.product-card:active, :deep(.q-btn):active, :deep(.q-fab):active {
+  will-change: transform, background-color;
+}
+
+/* Reduce paint complexity */
+.product-img {
+  contain: layout style paint;
+  backface-visibility: hidden;
+  transform: translateZ(0);
+}
+
+/* Optimize category tabs for performance */
+:deep(.q-tabs) {
+  contain: layout style;
+}
+
+:deep(.q-tab) {
+  backface-visibility: hidden;
+  transition: background-color 0.2s ease, transform 0.2s ease;
+}
+
+/* Drag and drop styles for category tabs */
+:deep(.q-tabs.is-dragging) {
+  user-select: none;
+}
+
+:deep(.q-tab.dragging) {
+  opacity: 0.6;
+  transform: scale(0.95);
+  cursor: grabbing;
+}
+
+:deep(.q-tab.drag-over) {
+  background-color: rgba(25, 118, 210, 0.1);
+  transform: scale(1.02);
+}
+
+:deep(.q-tab[draggable="true"]:not(.dragging)) {
+  cursor: grab;
+}
+
+:deep(.q-tab[draggable="true"]:hover:not(.dragging)) {
+  background-color: rgba(25, 118, 210, 0.05);
+}
+
+/* Drop cursor indicators */
+:deep(.q-tab.drop-cursor-left::before) {
+  content: '';
+  position: absolute;
+  left: -2px;
+  top: 10%;
+  bottom: 10%;
+  width: 3px;
+  background: linear-gradient(to bottom, transparent, #1976d2, transparent);
+  border-radius: 2px;
+  animation: dropCursorPulse 1s ease-in-out infinite alternate;
+  z-index: 10;
+}
+
+:deep(.q-tab.drop-cursor-right::after) {
+  content: '';
+  position: absolute;
+  right: -2px;
+  top: 10%;
+  bottom: 10%;
+  width: 3px;
+  background: linear-gradient(to bottom, transparent, #1976d2, transparent);
+  border-radius: 2px;
+  animation: dropCursorPulse 1s ease-in-out infinite alternate;
+  z-index: 10;
+}
+
+@keyframes dropCursorPulse {
+  0% { opacity: 0.6; transform: scaleY(0.8); }
+  100% { opacity: 1; transform: scaleY(1); }
+}
+
+/* Optimize receipt animations */
+.receipt-added {
+  animation: receiptPulse 0.6s ease-out;
+  will-change: transform, background-color;
+}
+
+@keyframes receiptPulse {
+  0% { transform: scale(1); }
+  50% { transform: scale(1.05); background-color: rgba(25, 118, 210, 0.1); }
+  100% { transform: scale(1); }
+}
+
+/* Fix mobile FAB positioning to prevent overflow */
+.receipt-fab {
+  margin-left: -4px; /* reduce left gap */
+}
+@media (max-width: 599px) {
+  .receipt-list {
+    padding-left: 1px !important; /* reduce list left padding on mobile */
+    padding-right: 8px !important;
+  }
+  .receipt-fab {
+    margin-left: -10px; /* further reduce left gap on mobile */
+  }
 }
 
 </style>

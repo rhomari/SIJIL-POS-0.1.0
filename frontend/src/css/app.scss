@@ -1,1 +1,73 @@
 // app global css in SCSS form
+
+// Disable context menu and text selection for POS interface
+* {
+  -webkit-user-select: none;
+  -moz-user-select: none;
+  -ms-user-select: none;
+  user-select: none;
+  -webkit-touch-callout: none;
+  -webkit-tap-highlight-color: transparent;
+}
+
+// Allow text selection for input fields
+input, textarea, [contenteditable] {
+  -webkit-user-select: text;
+  -moz-user-select: text;
+  -ms-user-select: text;
+  user-select: text;
+}
+
+// Ensure touch events work on receipt items
+.receipt-item, .q-item {
+  touch-action: manipulation !important;
+  pointer-events: auto !important;
+}
+
+// Enable touch events on the receipt list specifically
+.receipt-list .q-item {
+  touch-action: manipulation !important;
+  pointer-events: auto !important;
+}
+
+// Disable context menu globally\nbody {\n  -webkit-context-menu: none;\n}\n\n// Swipe-to-delete animations\n.swipe-item {\n  transition: transform 0.3s cubic-bezier(0.4, 0, 0.2, 1), opacity 0.3s ease;\n  transform-origin: left center;\n  position: relative;\n  overflow: hidden;\n}\n\n.swipe-item.swiping {\n  transition: none; // Disable transition during active swipe\n}\n\n.swipe-item.delete-ready {\n  background-color: rgba(244, 67, 54, 0.1);\n}\n\n// Swipe delete indicator\n.swipe-delete-indicator {\n  position: absolute;\n  right: 0;\n  top: 0;\n  bottom: 0;\n  width: 80px;\n  background: linear-gradient(90deg, transparent, rgba(244, 67, 54, 0.8));\n  display: flex;\n  align-items: center;\n  justify-content: center;\n  color: white;\n  font-size: 1.2em;\n  opacity: 0;\n  transition: opacity 0.2s ease;\n}\n\n.swipe-delete-indicator.visible {\n  opacity: 1;\n}\n\n// Smooth spring animation for snap back\n.swipe-item.snapping {\n  transition: transform 0.4s cubic-bezier(0.68, -0.55, 0.265, 1.55), opacity 0.3s ease;\n}
+
+// Prevent text selection highlighting
+::selection {
+  background: transparent;
+}
+
+::-moz-selection {
+  background: transparent;
+}
+
+// Disable context menu
+body {
+  -webkit-context-menu: none;
+}
+
+// Fast transitions during active swiping - More specific selectors
+.receipt-list .q-item.q-item-type.swiping {
+  transition: background-color 0.1s ease, border-left 0.1s ease !important;
+  border: 2px solid blue !important; // Temporary debug style
+}
+
+// Color phases during swipe - Orange to Red progression - More specific selectors
+.receipt-list .q-item.q-item-type.swipe-orange {
+  background-color: rgba(255, 152, 0, 0.8) !important; // Much stronger orange
+  border: 6px solid #ff9800 !important;
+  box-shadow: inset 0 0 10px rgba(255, 152, 0, 0.5) !important;
+}
+
+.receipt-list .q-item.q-item-type.swipe-red {
+  background-color: rgba(244, 67, 54, 0.8) !important; // Much stronger red
+  border: 6px solid #f44336 !important;
+  box-shadow: inset 0 0 10px rgba(244, 67, 54, 0.5) !important;
+}
+
+.receipt-list .q-item.q-item-type.swipe-delete-ready {
+  background-color: rgba(244, 67, 54, 0.9) !important; // Very strong red
+  border: 6px solid #d32f2f !important;
+  box-shadow: inset 0 0 15px rgba(244, 67, 54, 0.7) !important;
+  transform: translateX(-5px) !important;
+}
